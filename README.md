@@ -16,7 +16,6 @@ Install by cloning this repository and install with:
 python setup.py develop
 ```
 
-
 from within the repository.
 
 You'll need to install the development version of theano:
