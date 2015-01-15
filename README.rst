@@ -10,7 +10,9 @@ The main contributions are:
 
 Install by cloning this repository and install with:
 
-`python setup.py develop`
+```PYTHON
+python setup.py develop
+``
 
 from within the repository.
 
@@ -20,7 +22,9 @@ http://deeplearning.net/software/theano/install.html#bleeding-edge-install-instr
 
 Run:
 
-`python examples/lstm_long.py`
+```PYTHON
+python examples/lstm_long.py
+```
 
 for example code.
 
