@@ -1,3 +1,15 @@
+Søren Sønderby (c) 2015
+
+Code builds on work by Colin Raffel and Sander Dieleman. The main
+contributios are
+
+* Faster LSTM implementation
+* LSTM Dropout
+* Setupfunctions
+* Learned activation units + other activation funtions
+
+Original License:
+
 The MIT License (MIT)
 
 Copyright (c) 2014 Sander Dieleman
