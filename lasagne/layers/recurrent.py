@@ -6,7 +6,9 @@ from .. import init
 import numpy as np
 from .base import Layer
 from . import helper
-
+from lasagne import utils
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
+_srng = RandomStreams()
 
 class RecurrentLayer(Layer):
     '''
