@@ -1,4 +1,6 @@
-This is a fork of work by Colin Raffel (https://github.com/craffel).
+This code was used to produce the results in http://arxiv.org/abs/1412.7828
+
+The code is a fork of work by Colin Raffel (https://github.com/craffel).
 
 The main contributions are:
 
@@ -24,7 +26,7 @@ Run:
 
 ```PYTHON
 python examples/lstm_long.py
-```
+``
 
 for example code.
 
