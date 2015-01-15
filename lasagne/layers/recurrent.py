@@ -187,7 +187,8 @@ class RECURRENTTEST(Layer):
     :references:
         .. [#graves2014generating] Alex Graves, "Generating Sequences With
             Recurrent Neural Networks".
-        .. [Zaremba2014] Zaremba, W., Sutskever, I., & Vinyals, O. (2014). Recurrent neural network regularization.
+        .. [Zaremba2014] Zaremba, W., Sutskever, I., & Vinyals, O. (2014).
+            Recurrent neural network regularization.
     """
     ini = init.Uniform((-0.05, 0.05))
     glorot = init.Uniform()
@@ -197,8 +198,8 @@ class RECURRENTTEST(Layer):
     sigm = nonlinearities.sigmoid
     tanh = nonlinearities.tanh
 
-    def __init__(self, input_layer, num_units, backwards=False, W_x=ortho,
-                 non_lin_i=sigm, non_lin_f=sigm, non_lin_g=tanh,W_h=ortho,
+    def __init__(self, input_layer, num_units, backwards=False, W_x=ini,
+                 non_lin_i=sigm, non_lin_f=sigm, non_lin_g=tanh,W_h=ini,
                  W_c=ini, b=zero, non_lin_o=sigm, non_lin_out=tanh,
                  c_init=zero, h_init=zero, dropout_rate=0,
                  dropout_rescale=True, learn_init=True, peepholes=False,

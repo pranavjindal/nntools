@@ -363,8 +363,8 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
             fwd = addlayer(layer, nhid, nonlin, False)
             if isbrnn:
                bck = addlayer(layer, nhid, nonlin, True) # backwards true
-               #layer = nntools.layers.ConcatLayer([fwd, bck],axis=2)
-               layer = nntools.layers.ElemwiseSumLayer([fwd, bck])
+               layer = nntools.layers.ConcatLayer([fwd, bck],axis=2)
+               #layer = nntools.layers.ElemwiseSumLayer([fwd, bck])
             else:
                layer = fwd
 

@@ -26,6 +26,7 @@ from ConfusionMatrix import ConfusionMatrix          # confusion matrix class, p
 from LSTMTrainingFunctions import savemodel
 from LSTMTrainingFunctions import loadmodel
 from LSTMTrainingFunctions import adadelta_normscaled
+from LSTMTrainingFunctions import nesterov_normscaled
 from LSTMTrainingFunctions import padtobatchmultiplesimple
 from LSTMTrainingFunctions import createmodel
 from training_data_funcs import *
@@ -252,9 +253,10 @@ cost_val = costfun(
 
 all_params = lasagne.layers.get_all_params(l_out)
 
-updates = adadelta_normscaled(
-    cost_train, all_params,batch_size=BATCH_SIZE,learning_rate=1.0,
-    epsilon=10e-6, max_norm=MAX_NORM_GRADIENTS, verbose=VERBOSE)
+#updates = adadelta_normscaled(
+#    cost_train, all_params,batch_size=BATCH_SIZE,learning_rate=1.0,
+#    epsilon=10e-6, max_norm=MAX_NORM_GRADIENTS, verbose=VERBOSE)
+updates = nesterov_normscaled( cost_train, all_params, 0.01, 0.5, BATCH_SIZE)
 if UNITTYPE_RNN == 'LAunits':
         updates_launits = adadelta_normscaled(cost_train, params_launits,
                                 batch_size=BATCH_SIZE,learning_rate=1.0, epsilon=10e-6,
