@@ -1,3 +1,24 @@
+import numpy as np
+import scipy.io
+import theano
+import theano.tensor as T
+def one_hot(labels, n_classes):
+    '''
+    Converts an array of label integers to a one-hot matrix encoding
+
+    :parameters:
+        - labels : np.ndarray, dtype=int
+            Array of integer labels, in {0, n_classes - 1}
+        - n_classes : int
+            Total number of classes
+
+    :returns:
+        - one_hot : np.ndarray, dtype=bool, shape=(labels.shape[0], n_classes)
+            One-hot matrix of the input
+    '''
+    one_hot = np.zeros((labels.shape[0], n_classes)).astype(bool)
+    one_hot[range(labels.shape[0]), labels] = True
+    return one_hot
 def one_hot(labels, n_classes):
     '''
     Converts an array of label integers to a one-hot matrix encoding
@@ -47,7 +68,7 @@ def load_netcdf(filename):
     return X, y
 
 
-def make_batches(X, length, batch_size=BATCH_SIZE):
+def make_batches(X, length, batch_size=16):
     '''
     Convert a list of matrices into batches of uniform length
 

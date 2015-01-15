@@ -137,23 +137,6 @@ logger.addHandler(fh)
 #####################################################################################
 TRAIN_NC = '../data/train_1_speaker.nc'
 VAL_NC = '../data/val_1_speaker.nc'
-def one_hot(labels, n_classes):
-    '''
-    Converts an array of label integers to a one-hot matrix encoding
-
-    :parameters:
-        - labels : np.ndarray, dtype=int
-            Array of integer labels, in {0, n_classes - 1}
-        - n_classes : int
-            Total number of classes
-
-    :returns:
-        - one_hot : np.ndarray, dtype=bool, shape=(labels.shape[0], n_classes)
-            One-hot matrix of the input
-    '''
-    one_hot = np.zeros((labels.shape[0], n_classes)).astype(bool)
-    one_hot[range(labels.shape[0]), labels] = True
-    return one_hot
 
 logger.info('Loading data...')
 X_train, y_train = load_netcdf(TRAIN_NC)
