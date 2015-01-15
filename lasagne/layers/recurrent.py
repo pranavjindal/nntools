@@ -284,9 +284,9 @@ class RECURRENTTEST(Layer):
             self.n_gates = 1
             self.init_params = [self.h_init]
 
-        self.b = self.create_param(b, (self.n_gates*num_units),'b',)
-        self.W_h = self.create_param(W_h, (num_units, self.n_gates*num_units),'W_h')
-        self.W_x = self.create_param(W_x, (num_inputs,self.n_gates*num_units), 'W_x')
+        self.b = self.create_param(b, (self.n_gates*num_units))
+        self.W_h = self.create_param(W_h, (num_units, self.n_gates*num_units))
+        self.W_x = self.create_param(W_x, (num_inputs,self.n_gates*num_units))
         self.non_lin_out = non_lin_out
 
     def get_weight_params(self):
