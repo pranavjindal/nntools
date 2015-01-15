@@ -1,8 +1,28 @@
-This is a fork of work by Colin Raffel. The main contributions are
+This is a fork of work by Colin Raffel (https://github.com/craffel).
 
+The main contributions are:
 
+ *  Faster LSTM/RNN implementation
+ *  Bidirectional LSTM/RNN
+ *  LSTM Dropout  (http://arxiv.org/abs/1409.2329)
+ *  Setupfunctions
+ *  Learned activation units + other activation funtions (http://arxiv.org/abs/1412.6830)
 
+Install by cloning this repository and install with:
 
+`python setup.py develop`
+
+from within the repository.
+
+You'll need to install the development version of theano:
+
+http://deeplearning.net/software/theano/install.html#bleeding-edge-install-instructions
+
+Run:
+
+`python examples/lstm_long.py`
+
+for example code.
 
 Lasagne
 =======

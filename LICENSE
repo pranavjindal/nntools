@@ -3,11 +3,11 @@ Søren Sønderby (c) 2015
 Code builds on work by Colin Raffel and Sander Dieleman. The main
 contributions are
 
-* Faster LSTM implementation
-* Bidirectional LSTM
-* LSTM Dropout
-* Setupfunctions
-* Learned activation units + other activation funtions
+ *  Faster LSTM implementation
+ *  Bidirectional LSTM
+ *  LSTM Dropout
+ *  Setupfunctions
+ *  Learned activation units + other activation funtions
 
 Original License:
 
