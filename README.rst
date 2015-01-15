@@ -1,3 +1,9 @@
+This is a fork of work by Colin Raffel. The main contributions are
+
+
+
+
+
 Lasagne
 =======
 
