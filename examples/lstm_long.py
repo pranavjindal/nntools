@@ -173,7 +173,6 @@ N_SAMPLES_TRAIN_PADDED = X_train.shape[0]
 N_SAMPLES_VAL_PADDED = X_val.shape[0]
 
 X_val, y_val, mask_val = padtobatchmultiplesimple(X_val, y_val, mask_val, BATCH_SIZE)
-X_train, y_train, mask_train = padtobatchmultiplesimple(X_train, y_train, mask_train, BATCH_SIZE)
 
 #######################################################
 # symbolic variables                                  #
