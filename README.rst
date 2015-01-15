@@ -14,7 +14,8 @@ Install by cloning this repository and install with:
 
 ```PYTHON
 python setup.py develop
-``
+```
+
 
 from within the repository.
 
@@ -26,7 +27,7 @@ Run:
 
 ```PYTHON
 python examples/lstm_long.py
-``
+```
 
 for example code.
 
