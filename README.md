@@ -26,6 +26,7 @@ Run:
 
 ```PYTHON
 python examples/lstm_long.py
+python examples/lstm_shor.py
 ```
 
 for example code.
