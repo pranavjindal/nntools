@@ -50,7 +50,7 @@ def prederrrate(output, target_output, mask,db='Y_PRED_ERRORS:',verbose=False):
     return error
 
 # class for clipping gradient. Not uses atm
-# apply around loss, T.grad(grad_clip(loss), all_params)
+# apply around loss, T.grad(check_grad(loss), all_params)
 #rom theano import ifelse
 class GradClip(theano.compile.ViewOp):
 
@@ -68,13 +68,13 @@ class GradClip(theano.compile.ViewOp):
             return g_out
         return [pgrad(g_out) for g_out in g_outs]
 
-grad_clip = GradClip(-1.0, 1.0)
-T.opt.register_canonicalize(theano.gof.OpRemove(grad_clip), name='grad_clip')
+gradient_clipper = GradClip(-1.0, 1.0)
+T.opt.register_canonicalize(theano.gof.OpRemove(gradient_clipper), name='gradient_clipper')
 
 def momentum_normscaled(loss, all_params, lr, mom, batch_size, max_norm=np.inf, weight_decay=0.0,verbose=False):
     updates = []
     #all_grads = [theano.grad(loss, param) for param in all_params]
-    all_grads = theano.grad(grad_clip(loss),all_params)
+    all_grads = theano.grad(gradient_clipper(loss),all_params)
 
     grad_lst = [ T.sum( (  grad / float(batch_size) )**2  ) for grad in all_grads ]
     grad_norm = T.sqrt( T.sum( grad_lst ))
@@ -105,7 +105,7 @@ def momentum_normscaled(loss, all_params, lr, mom, batch_size, max_norm=np.inf, 
 
 def nesterov_normscaled(loss, all_params,  lr, mom, batch_size, max_norm=np.inf, weight_decay=0.0,verbose=False):
     #all_grads = [theano.grad(loss, param) for param in all_params]
-    all_grads = theano.grad(grad_clip(loss), all_params)
+    all_grads = theano.grad(gradient_clipper(loss), all_params)
     updates = []
 
     grad_lst = [ T.sum( (  grad / float(batch_size) )**2  ) for grad in all_grads ]
@@ -184,7 +184,7 @@ def adadelta_normscaled(loss, all_params,batch_size=1,max_norm=np.inf,
 
 
     #all_grads = [theano.grad(loss, param) for param in all_params]
-    all_grads = theano.grad(grad_clip(loss),all_params)
+    all_grads = theano.grad(gradient_clipper(loss),all_params)
 
     if max_norm > 0:
         all_grads = apply_max_norm(all_grads)
