@@ -4,6 +4,7 @@ import theano.tensor as T
 import numpy as np
 from theano.ifelse import ifelse
 import lasagne
+from lasagne import init
 import cPickle
 
 def maskednll(output,target_output, mask,batch_size,verbose=False,db='COST:'):
@@ -258,7 +259,8 @@ def padtobatchmultiplesimple(X, y, mask, batch_size):
 def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_type_rnn, padded_seq_len,output_layers,learn_init,
                  input_layers,final_output_layer, input_layer_dropout=0.0,
                  dropout_rnn=0.0, output_layer_dropout=0.0, unittype_rnn='tanh',
-                 relucap=0, reluleakyness=0, rnn_skip_connection=False):
+                 relucap=0, reluleakyness=0,
+                 weight_init=0.05):
     '''
     Setup various LSTM and RNN networks
 
@@ -292,9 +294,6 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
     :param relucap: cap on ReLU and LAunit output. For the LAunit this is the
         total output. Each line segment is capped ot be cap / segments
     :param reluleakyness: ReLU leakyness
-    :param rnn_skip_connection: adds skip connection that bypasses the RNN units
-            if this is a non False value it must be an input layer with shape
-            batchsize x seqlen x some_number_of_features
     :param Weight init scale, float
     :return: network output layer, list of la_unit params (possbly empty list)
 
@@ -320,11 +319,17 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
         else:
             assert False, "Unknown layertype"
 
+        layer_func = lasagne.layers.BidirectionalLSTMLayer if isbrnn \
+            else lasagne.layers.LSTMLayer
+        print layer_func
 
-        addlayer = lambda prevlayer,nhid,nonlin,backwards: lasagne.layers.RECURRENTTEST(
+        ini = lasagne.init.Uniform((-weight_init, weight_init))
+        addlayer = lambda prevlayer,nhid,nonlin: layer_func(
             prevlayer, num_units=nhid, dropout_rate=dropout_rnn,
-            backwards=backwards,learn_init=learn_init, non_lin_out=nonlin,
-            peepholes = peepholes, type=type)
+            learn_init=learn_init, nonlinearity_out=nonlin,
+            peepholes = peepholes,
+            W_cell_to_gates=ini, W_hid_to_gates=ini, W_in_to_gates=ini,
+            b_gates=init.Constant(0.0))
 
 
         layer = prevlayer
@@ -361,13 +366,7 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
             else:
                 assert False, 'Unknown Recurrent unit type: ' + unittype_rnn
 
-            fwd = addlayer(layer, nhid, nonlin, False)
-            if isbrnn:
-               bck = addlayer(layer, nhid, nonlin, True) # backwards true
-               layer = lasagne.layers.ConcatLayer([fwd, bck],axis=2)
-               #layer = lasagne.layers.ElemwiseSumLayer([fwd, bck])
-            else:
-               layer = fwd
+            layer = addlayer(layer, nhid, nonlin)
 
         return layer
 
@@ -380,7 +379,7 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
             layer = lasagne.layers.DenseLayer(
                 layer, nhid, nonlinearity=lasagne.nonlinearities.rectify)
             if dropout > 0:
-                 layer = v.layers.dropout(layer, p=input_layer_dropout)
+                 layer = lasagne.layers.dropout(layer, p=input_layer_dropout)
         return layer
 
     #add input network
@@ -398,14 +397,6 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
             inputlayer, shape=(batch_size, padded_seq_len, inputlayer.get_output_shape()[-1]))
 
     lstm_out = create_lstm(isbrnn, rnn_layer_layers, inputlayer)  # forward net
-
-    if rnn_skip_connection != False:
-        print "ADDING RNN SKIP CONNECTIONS"
-        # assumes that the shape of the input layer is
-        # batchsize x seqlen x some_number_of_features
-        input2 = rnn_skip_connection
-        lstm_out = lasagne.layers.ConcatLayer([lstm_out, input2],axis=2)
-
 
 
     lstm_out_hid  = lstm_out.get_output_shape()[2]
