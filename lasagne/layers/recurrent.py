@@ -575,7 +575,7 @@ class BidirectionalLSTMLayer(Layer):
         self.W_hid_to_gates = self.create_param(
             W_hid_to_gates, (2, num_units, 4*num_units))
         self.W_in_to_gates = self.create_param(
-            W_in_to_gates, (2, num_inputs,4*num_units))
+            W_in_to_gates, (2, num_inputs, 4*num_units))
 
         # Setup initial values for the cell and the lstm hidden units
         self.cell_init_fwd = self.create_param(
@@ -584,6 +584,16 @@ class BidirectionalLSTMLayer(Layer):
         self.cell_init_bck = self.create_param(
             cell_init, (num_batch, num_units))
         self.hid_init_bck = self.create_param(hid_init, (num_batch, num_units))
+
+        #names for debugging
+        self.W_cell_to_gates.name = "W_cell_to_gates"
+        self.b_gates.name = "b_gates"
+        self.W_hid_to_gates.name = "W_hid_to_gates"
+        self.W_in_to_gates.name = "W_in_to_gates"
+        self.cell_init_fwd.name = "cell_init_fwd"
+        self.hid_init_fwd.name = "hid_init_fwd"
+        self.cell_init_bck.name = "cell_init_bck"
+        self.hid_init_bck.name = "hid_init_bck"
 
     def get_params(self):
         '''
@@ -709,7 +719,6 @@ class BidirectionalLSTMLayer(Layer):
             input_dot_W_bck = D(
                 T.dot(input_bck, self.W_in_to_gates[1]).dimshuffle(1, 0, 2))
 
-
         input_dot_W_fwd += self.b_gates[0]
         input_dot_W_bck += self.b_gates[1]
 
@@ -722,9 +731,10 @@ class BidirectionalLSTMLayer(Layer):
         if mask_bck.ndim == 2:
             mask_bck = mask_bck.dimshuffle(1, 0, 'x')
         else:
-            assert mask_bck.broadcastable == (false, false, true), \
+            assert mask_bck.broadcastable == (False, False, True), \
                 "When mask is 3d the last dimension must be boadcastable"
             mask_bck = mask_bck.dimshuffle(1, 0, 2)
+            mask_bck.name = 'mask_bck'
 
 
         # input_dow_w is (n_batch, n_time_steps, 4*num_units). We define a
@@ -776,10 +786,10 @@ class BidirectionalLSTMLayer(Layer):
 
             #forward
             cell_fwd, hid_fwd = dostep(
-                input_dot_W_fwd_n, cell_previous_fwd, hid_previous_fwd,0)
+                input_dot_W_fwd_n, cell_previous_fwd, hid_previous_fwd, 0)
             # backward
             cell_bck, hid_bck = dostep(
-                input_dot_W_bck_n, cell_previous_bck, hid_previous_bck,1)
+                input_dot_W_bck_n, cell_previous_bck, hid_previous_bck, 1)
 
             # If mask is 0, use previous state until mask = 1 is found.
             # This propagates the layer initial state when moving backwards
@@ -788,18 +798,18 @@ class BidirectionalLSTMLayer(Layer):
             cell_bck = cell_bck*mask_bck + cell_previous_bck*not_mask_bck
             hid_bck = hid_fwd*mask_bck + hid_previous_bck*not_mask_bck
 
-            return [cell_fwd, hid_fwd, cell_bck, hid_bck]
+            return [cell_fwd, cell_bck, hid_bck, hid_fwd]
 
         sequences = [input_dot_W_fwd, input_dot_W_bck, mask_bck]
-        init = [self.cell_init_fwd, self.hid_init_fwd,
-                self.cell_init_bck, self.hid_init_bck]
+        init = [self.cell_init_fwd, self.cell_init_bck,
+                self.hid_init_bck, self.hid_init_bck]
 
         # Scan op iterates over first dimension of input and repeatedly
         # applied the step function
-        scan_out = theano.scan(step, sequences=sequences, outputs_info=init)#[0][1]
+        scan_out = theano.scan(step, sequences=sequences, outputs_info=init)
 
         # output is  (n_time_steps, n_batch, n_units))
-        output_fwd = scan_out[0][1]
+        output_fwd = scan_out[0][2]
         output_bck = scan_out[0][3] # this should be 3 but it does not compile
 
         # reverse bck output

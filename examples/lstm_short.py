@@ -14,7 +14,7 @@ theano.scan.allow_gc=False
 #theano.config.mode = 'FAST_COMPILE'
 theano.config.mode = 'FAST_RUN'
 #theano.config.mode = 'DEBUG_MODE'
-#theano.config.compute_test_value = 'raise'
+theano.config.compute_test_value = 'raise'
 #theano.config.optimizer = None
 #theano.config.exception_verbosity='high'
 
@@ -34,8 +34,6 @@ from training_data_funcs import *
 
 import logging
 np.random.seed(1234)
-
-MAX_SEQ_LENGTH = 216
 BATCH_SIZE = 64
 N_EPOCHS =  100
 VERBOSE = False
@@ -73,13 +71,13 @@ X_val = X_val
 y_val = y_val
 
 # Find the longest sequence
-length = max(max([X.shape[0] for X in X_train]),
+MAX_SEQ_LENGTH = max(max([X.shape[0] for X in X_train]),
              max([X.shape[0] for X in X_val]))
 # Convert to batches of time series of uniform length
-X_train, _ = make_batches(X_train, length)
-y_train, mask_train = make_batches(y_train, length)
-X_val, _ = make_batches(X_val, length)
-y_val, mask_val = make_batches(y_val, length)
+X_train, _ = make_batches(X_train, MAX_SEQ_LENGTH)
+y_train, mask_train = make_batches(y_train, MAX_SEQ_LENGTH)
+X_val, _ = make_batches(X_val, MAX_SEQ_LENGTH)
+y_val, mask_val = make_batches(y_val, MAX_SEQ_LENGTH)
 
 
 N_FEATURES = X_train.shape[-1]
@@ -151,18 +149,21 @@ sym_input.tag.test_value = \
 # Setup Bidirectional LSTM
 ####################
 
-l_in = lasagne.layers.InputLayer(shape=(BATCH_SIZE, MAX_SEQ_LENGTH, X_val.shape[-1]))
-l_in = lasagne.layers.GaussianNoiseLayer(l_in, sigma=0.6)
-recout = lasagne.layers.BidirectionalLSTMLayer(l_in, num_units=3, dropout_rate=0.1)
-recout = lasagne.layers.BidirectionalLSTMLayer(recout, num_units=4, dropout_rate=0.1)
+l_in = lasagne.layers.InputLayer(shape=(BATCH_SIZE, MAX_SEQ_LENGTH, N_FEATURES))
+#l_in = lasagne.layers.GaussianNoiseLayer(l_in, sigma=0.6)
+recout = lasagne.layers.BidirectionalLSTMLayer(
+    l_in, num_units=3, dropout_rate=0.0)
+recout = lasagne.layers.BidirectionalLSTMLayer(
+    recout, num_units=4, dropout_rate=0.0)
 recout = lasagne.layers.BidirectionalLSTMLayer(recout, num_units=5)
-l_reshape = lasagne.layers.ReshapeLayer(recout,
-                                       (BATCH_SIZE*length, recout.get_output_shape()[-1]))
-nonlinearity = lasagne.nonlinearities.softmax
-l_rec_out = lasagne.layers.DenseLayer(l_reshape, num_units=y_val.shape[-1],
-                                      nonlinearity=nonlinearity)
+l_reshape = lasagne.layers.ReshapeLayer(
+    recout,  (BATCH_SIZE*MAX_SEQ_LENGTH, recout.get_output_shape()[-1]))
+
+l_rec_out = lasagne.layers.DenseLayer(
+    l_reshape, num_units=N_CLASSES,
+    nonlinearity=lasagne.nonlinearities.softmax)
 l_out = lasagne.layers.ReshapeLayer(l_rec_out,
-                                    (BATCH_SIZE, length, y_val.shape[-1]))
+                                    (BATCH_SIZE, MAX_SEQ_LENGTH, N_CLASSES))
 
 # createnet in LSTMTrainingFunctions can setup networks with a number of
 # different architectures.
@@ -170,12 +171,12 @@ l_out = lasagne.layers.ReshapeLayer(l_rec_out,
 # Cross entropy cost function.
 # Note that we use the mask to ignore masked sequences during cost calculation
 def costfun(p_y_given_x, y, mask,db='COST:'):
-    n_samples = BATCH_SIZE*MAX_SEQ_LENGTH
-    shape = (n_samples, N_CLASSES)
+    shape = (BATCH_SIZE*MAX_SEQ_LENGTH, N_CLASSES)
     y_reshape = y.flatten()
     pyx_reshape = p_y_given_x.reshape(shape)
     mask_reshape = mask.flatten()
-    xe_unnorm = -T.log(pyx_reshape[T.arange(n_samples), y_reshape]+ 1e-8)
+    xe_unnorm = -T.log(
+        pyx_reshape[T.arange(BATCH_SIZE*MAX_SEQ_LENGTH), y_reshape]+ 1e-8)
     xe = T.sum( xe_unnorm * mask_reshape) / T.sum(mask)
 
     if VERBOSE:   #DEBUGING
