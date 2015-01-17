@@ -1,14 +1,16 @@
 import theano
 import theano.tensor as T
-
+import numpy as np
 from .. import nonlinearities
 from .. import init
-import numpy as np
+
 from .base import Layer
 from . import helper
+
 from lasagne import utils
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 _srng = RandomStreams()
+
 
 class RecurrentLayer(Layer):
     '''
@@ -153,6 +155,7 @@ class RecurrentLayer(Layer):
             sequences = input
             step_fun = step
 
+
         output = theano.scan(step_fun, sequences=sequences,
                              go_backwards=self.backwards,
                              outputs_info=[self.hid_init])[0]
@@ -178,132 +181,120 @@ class ReshapeLayer(Layer):
         return input.reshape(self.shape)
 
 
-class RECURRENTTEST(Layer):
-    """
-    FAST is 30% percent faster + alleviates some gpu dropout problems but uses
-    more memory. Implementation based on work by Colin Raffel.
-
+class LSTMLayer(Layer):
+    '''
+    A long short-term memory (LSTM) layer.  Includes "peephole connections" and
+    forget gate.  Based on the definition in [#graves2014generating]_, which is
+    the current common definition. Gate names are taken from [#zaremba2014],
+    figure 1. This is the unidirectional layer, for bidirectional
+    implementation see BidirectionalLSTMLayer.
 
     :references:
         .. [#graves2014generating] Alex Graves, "Generating Sequences With
             Recurrent Neural Networks".
-        .. [Zaremba2014] Zaremba, W., Sutskever, I., & Vinyals, O. (2014).
-            Recurrent neural network regularization.
-    """
+        .. [#zareba2014] Zaremba, W. et.al  Recurrent neural network
+           regularization. (http://arxiv.org/abs/1409.2329)
+    '''
     ini = init.Uniform((-0.05, 0.05))
-    glorot = init.Uniform()
     zero = init.Constant(0.)
     ortho = init.Orthogonal(np.sqrt(2))
-    # ini = init.Normal(0.1)
-    sigm = nonlinearities.sigmoid
-    tanh = nonlinearities.tanh
-
-    def __init__(self, input_layer, num_units, backwards=False, W_x=ini,
-                 non_lin_i=sigm, non_lin_f=sigm, non_lin_g=tanh,W_h=ini,
-                 W_c=ini, b=zero, non_lin_o=sigm, non_lin_out=tanh,
-                 c_init=zero, h_init=zero, dropout_rate=0,
-                 dropout_rescale=True, learn_init=True, peepholes=False,
-                 type='LSTM'):
-        """
-        Initialize an LSTM layer optionally with peepholes or RNN.
-        For details on LSTM see [#Zaremba2014] sec. 3.1 + figure 1
-        and [#graves2014generator] eq 7-11.
-
-        Optionally applies dropout to the non recurrent connections
+    def __init__(self, input_layer, num_units,
+                 W_in_to_gates=ini,
+                 W_hid_to_gates=ini,
+                 W_cell_to_gates=ini,
+                 b_gates=zero,
+                 nonlinearity_ingate=nonlinearities.sigmoid,
+                 nonlinearity_forgetgate=nonlinearities.sigmoid,
+                 nonlinearity_modulationgate=nonlinearities.tanh,
+                 nonlinearity_outgate=nonlinearities.sigmoid,
+                 nonlinearity_out=nonlinearities.tanh,
+                 cell_init=init.Constant(0.),
+                 hid_init=init.Constant(0.),
+                 learn_init=False,
+                 peepholes=True,
+                 dropout_rate=0.0,
+                 dropout_rescale=True):
+        '''
+        Initialize an LSTM layer.  For details on what the parameters mean, see
+        (7-11) from [#graves2014generating]_.
 
         :parameters:
             - input_layer : layers.Layer
                 Input to this recurrent layer
             - num_units : int
                 Number of hidden units
-            - backwards : Boolean
-                indicate if scan should be forwards or backwards, for bidirectional LSTM
-            - W_x : function or np.ndarray or theano.shared
-                :math:`W_{x}`
-            - W_h : function or np.ndarray or theano.shared
-                :math:`W_{h}`
-            - b : function or np.ndarray or theano.shared
-                :math:`b`
-            - non_lin_i : function
-                :math:`\sigma`
-            - non_lin_f : function
-                :math:`\sigma`
-            - non_lin_g : function
-            - non_lin_o : function
-                :math:`\sigma`
-            - non_lin_out : function or np.ndarray or theano.shared
-                :math:`\tanh`
-            - c_init : function or np.ndarray or theano.shared
+            - W_in_to_gates : function or np.ndarray or theano.shared
+            - W_hid_to_gates : function or np.ndarray or theano.shared
+            - W_cell_to_gates : function or np.ndarray or theano.shared
+            - b_gates : function or np.ndarray or theano.shared
+            - nonlinearity_ingate : function
+            - nonlinearity_forgetgate : function
+            - nonlinearity_modulationgate : function
+            - nonlinearity_outgate : function
+            - nonlinearity_out : function
+            - cell_init : function or np.ndarray or theano.shared
                 :math:`c_0`
-            - h_init : function or np.ndarray or theano.shared
+            - hid_init : function or np.ndarray or theano.shared
                 :math:`h_0`
-            - dropout_rate : float between 0 and 1
-                Determines the rate of dropout. 1 will dropout all units, 0 will dropout none [#Zaremba2014]
-            - dropout_rescale: Boolean
-                if true the non recurrent weights are scaled with 1/(1 - dropout_rate) when deterministic is False
-            - learn_init: Boolean
-                if true the initial state for hidden and memory cells will be learned
-            - peepholes: Boolean
-                Using peepholes seems to increase the computational time by ~25%
+            - learn_init : boolean
+                If True, initial hidden values are learned
+            - peepholes : boolean
+                If True, the LSTM uses peephole connections.
+                When False, W_cell_to_ingate, W_cell_to_forgetgate and
+                W_cell_to_outgate are ignored.
+            - dropout_rate: dropout rate on non-recurrent connectios
+            - dropout_rescale: if dropout activation should be rescaled or not
+        '''
 
-        """
+        # Initialize parent layer
+        super(LSTMLayer, self).__init__(input_layer)
+        # For any of the nonlinearities, if None is supplied, use identity
+        if nonlinearity_ingate is None:
+            self.nonlinearity_ingate = nonlinearities.identity
+        else:
+            self.nonlinearity_ingate = nonlinearity_ingate
 
-        super(RECURRENTTEST, self).__init__(input_layer)
-        assert type in ['LSTM', 'RNN'], 'TYPE must be LSTM or RNN'
+        if nonlinearity_forgetgate is None:
+            self.nonlinearity_forgetgate = nonlinearities.identity
+        else:
+            self.nonlinearity_forgetgate = nonlinearity_forgetgate
+
+        if nonlinearity_modulationgate is None:
+            self.nonlinearity_modulationgate = nonlinearities.identity
+        else:
+            self.nonlinearity_modulationgate = nonlinearity_modulationgate
+
+        if nonlinearity_outgate is None:
+            self.nonlinearity_outgate = nonlinearities.identity
+        else:
+            self.nonlinearity_outgate = nonlinearity_outgate
+
+        if nonlinearity_out is None:
+            self.nonlinearity_out = nonlinearities.identity
+        else:
+            self.nonlinearity_out = nonlinearity_out
+
+        self.learn_init = learn_init
         self.num_units = num_units
+        self.peepholes = peepholes
         self.dropout_rate = dropout_rate
         self.dropout_rescale = dropout_rescale
-        self.backwards = backwards
-        self.learn_init = learn_init
-        self.type = type
-        self.peepholes = peepholes
-        print '       |TYPE       ',  self.type
-        print '       |DROPOUT    ',  self.dropout_rate
-        print '       |BACKWARDS  ',  self.backwards
-        print '       |LEARN INIT ',  self.learn_init
-        print '       |NUNITS     ',  self.num_units
-        if self.type == 'LSTM':
-            print '       |PEEPHOLES  ',  self.peepholes
 
         # Input dimensionality is the output dimensionality of the input layer
         (num_batch, _, num_inputs) = self.input_layer.get_output_shape()
 
-        # Initialize parameters using the supplied args
-        self.h_init = self.create_param(h_init, (num_batch, num_units))
-        if self.type == 'LSTM':
-            self.c_init = self.create_param(c_init, (num_batch, num_units))
-            self.init_params = [self.c_init, self.h_init]
-            self.n_gates = 4
-            self.non_lin_i = non_lin_i
-            self.non_lin_f = non_lin_f
-            self.non_lin_o = non_lin_g
-            self.non_lin_g = non_lin_o
-            if self.peepholes:
-                self.W_c = self.create_param(W_c, ((self.n_gates-1)*num_units))
+        if self.peepholes:
+            self.W_cell_to_gates = self.create_param(
+                W_cell_to_gates, (3*num_units))
+        self.b_gates = self.create_param(b_gates, (4*num_units))
+        self.W_hid_to_gates = self.create_param(
+            W_hid_to_gates, (num_units, 4*num_units))
+        self.W_in_to_gates = self.create_param(
+            W_in_to_gates, (num_inputs,4*num_units))
 
-
-        elif self.type == 'RNN':
-            assert peepholes== False, "RNN's cannot have peepholes"
-            self.n_gates = 1
-            self.init_params = [self.h_init]
-
-        self.b = self.create_param(b, (self.n_gates*num_units))
-        self.W_h = self.create_param(W_h, (num_units, self.n_gates*num_units))
-        self.W_x = self.create_param(W_x, (num_inputs,self.n_gates*num_units))
-        self.non_lin_out = non_lin_out
-
-    def get_weight_params(self):
-        return [self.W_h, self.W_x]
-
-    def get_init_params(self):
-        return self.init_params
-
-
-    def get_bias_params(self):
-        return [self.b]
-
-    def get_peephole_params(self):
-        return [self.W_c]
+        # Setup initial values for the cell and the lstm hidden units
+        self.cell_init = self.create_param(cell_init, (num_batch, num_units))
+        self.hid_init = self.create_param(hid_init, (num_batch, num_units))
 
     def get_params(self):
         '''
@@ -314,17 +305,53 @@ class RECURRENTTEST(Layer):
                 List of all parameters
         '''
         params = self.get_weight_params() + self.get_bias_params()
+        if self.peepholes:
+            params.extend(self.get_peephole_params())
 
         if self.learn_init:
-            params += self.get_init_params()
-
-        if self.peepholes:
-            params += self.get_peephole_params()
+            params.extend(self.get_init_params())
 
         return params
 
+    def get_weight_params(self):
+        '''
+        Get all weights of this layer
+        :returns:
+            - weight_params : list of theano.shared
+                List of all weight parameters
+        '''
+        return [self.W_in_to_gates, self.W_hid_to_gates]
+
+    def get_peephole_params(self):
+        '''
+        Get all peephole parameters of this layer.
+        :returns:
+            - init_params : list of theano.shared
+                List of all peephole parameters
+        '''
+        return [self.W_cell_to_gates]
+
+    def get_init_params(self):
+        '''
+        Get all initital parameters of this layer.
+        :returns:
+            - init_params : list of theano.shared
+                List of all initial parameters
+        '''
+        return [self.hid_init, self.cell_init]
+
+    def get_bias_params(self):
+        '''
+        Get all bias parameters of this layer.
+
+        :returns:
+            - bias_params : list of theano.shared
+                List of all bias parameters
+        '''
+        return [self.b_gates]
+
     def get_output_shape_for(self, input_shape):
-        """
+        '''
         Compute the expected output shape given the input.
 
         :parameters:
@@ -334,10 +361,301 @@ class RECURRENTTEST(Layer):
         :returns:
             - output_shape : tuple
                 Dimensionality of expected outputs given input_shape
-        """
+        '''
         return (input_shape[0], input_shape[1], self.num_units)
 
-    def get_output_for(self, input, deterministic=False,mask=None, *args, **kwargs):
+    def get_output_for(self, input, deterministic=False, *args, **kwargs):
+        '''
+        Compute this layer's output function given a symbolic input variable
+
+        :parameters:
+            - input : theano.TensorType
+                Symbolic input variable
+
+        :returns:
+            - layer_output : theano.TensorType
+                Symbolic output variable
+        '''
+        # Treat all layers after the first as flattened feature dimensions
+        if input.ndim > 3:
+            input = input.reshape((input.shape[0], input.shape[1],
+                                   T.prod(input.shape[2:])))
+
+        # dropout function
+        def D(x):
+            batch_size, seq_length, _ = self.input_layer.get_output_shape()
+            shape = (seq_length, batch_size, 4*self.num_units)
+            retain_prob = 1 - self.dropout_rate
+            if self.dropout_rescale:
+                x /= retain_prob
+            return x * utils.floatX(
+                _srng.binomial(shape, p=retain_prob, dtype='int32'))
+
+        # precompute inputs*W and dimshuffle
+        # Input is provided as (n_batch, n_time_steps, n_features)
+        # W _in_to_gates is (n_features, 4*num_units). input dot W is then
+        # (n_batch, n_time_steps, 4*num_units). Because scan iterate over the
+        # first dimension we dimshuffle to (n_time_steps, n_batch, n_features)
+        if deterministic or self.dropout_rate == 0:
+            input_dot_W = T.dot(input, self.W_in_to_gates).dimshuffle(1, 0, 2)
+        else:
+            input_dot_W = D(
+                T.dot(input, self.W_in_to_gates).dimshuffle(1, 0, 2))
+
+
+        input_dot_W += self.b_gates
+
+
+        # input_dow_w is (n_batch, n_time_steps, 4*num_units). We define a
+        # slicing function that extract the input to each LSTM gate
+        # slice_c is similar but for peephole weights.
+        def slice_w(x, n):
+            return x[:, n*self.num_units:(n+1)*self.num_units]
+        def slice_c(x, n):
+            return x[n*self.num_units:(n+1)*self.num_units]
+
+        # Create single recurrent computation step function
+        # input_dot_W_n is the n'th row of the input dot W multiplication
+        # The step function calculates the following:
+        #
+        # i_t = \sigma(W_{xi}x_t + W_{hi}h_{t-1} + W_{ci}c_{t-1} + b_i)
+        # f_t = \sigma(W_{xf}x_t + W_{hf}h_{t-1} + W_{cf}c_{t-1} + b_f)
+        # c_t = f_tc_{t - 1} + i_t\tanh(W_{xc}x_t + W_{hc}h_{t-1} + b_c)
+        # o_t = \sigma(W_{xo}x_t + W_{ho}h_{t-1} + W_{co}c_t + b_o)
+        # h_t = o_t \tanh(c_t)
+        #
+        # Gate names are taken from http://arxiv.org/abs/1409.2329 figure 1
+        def step(input_dot_W_n, cell_previous, hid_previous):
+
+            # calculate gates pre-activations and slice
+            gates = input_dot_W_n + T.dot(hid_previous, self.W_hid_to_gates)
+            ingate = slice_w(gates,0)
+            forgetgate = slice_w(gates,1)
+            modulationgate = slice_w(gates,2)
+            outgate = slice_w(gates,3)
+
+
+            if self.peepholes:
+                ingate += cell_previous*slice_c(self.W_cell_to_gates, 0)
+                forgetgate = cell_previous*slice_c(self.W_cell_to_gates, 1)
+                outgate = cell_previous*slice_c(self.W_cell_to_gates, 2)
+
+            ingate = self.nonlinearity_ingate(ingate)
+            forgetgate = self.nonlinearity_forgetgate(forgetgate)
+            modulationgate = self.nonlinearity_modulationgate(modulationgate)
+            outgate = self.nonlinearity_outgate(outgate)
+
+            cell = forgetgate*cell_previous + ingate*modulationgate
+            hid = outgate*self.nonlinearity_out(cell)
+            return [cell, hid]
+
+        # Scan op iterates over first dimension of input and repeatedly
+        # applied the step function
+        output = theano.scan(step, sequences=input_dot_W,
+                             outputs_info=[self.cell_init, self.hid_init],
+                             go_backwards=False)[0][1]
+
+        # Now, dimshuffle back to (n_batch, n_time_steps, n_features))
+        output = output.dimshuffle(1, 0, 2)
+
+        return output
+
+
+class BidirectionalLSTMLayer(Layer):
+    '''
+    A long short-term memory (LSTM) layer.  Includes "peephole connections" and
+    forget gate.  Based on the definition in [#graves2014generating]_, which is
+    the current common definition. Gate names are taken from [#zaremba2014],
+    figure 1. This is the bidirectional layer, for unidirectional
+    implementation see LSTMLayer.
+    The output from the forward and backward passes are concatenated, such
+    that the output will be 2*num_units in the last dimension of the output.
+
+    :references:
+        .. [#graves2014generating] Alex Graves, "Generating Sequences With
+            Recurrent Neural Networks".
+        .. [#zareba2014] Zaremba, W. et.al  Recurrent neural network
+           regularization. (http://arxiv.org/abs/1409.2329)
+    '''
+    ini = init.Uniform((-0.05, 0.05))
+    zero = init.Constant(0.)
+    ortho = init.Orthogonal(np.sqrt(2))
+    def __init__(self, input_layer, num_units,
+                 W_in_to_gates=ini,
+                 W_hid_to_gates=ini,
+                 W_cell_to_gates=ini,
+                 b_gates=zero,
+                 nonlinearity_ingate=nonlinearities.sigmoid,
+                 nonlinearity_forgetgate=nonlinearities.sigmoid,
+                 nonlinearity_modulationgate=nonlinearities.tanh,
+                 nonlinearity_outgate=nonlinearities.sigmoid,
+                 nonlinearity_out=nonlinearities.tanh,
+                 cell_init=init.Constant(0.),
+                 hid_init=init.Constant(0.),
+                 learn_init=False,
+                 peepholes=True,
+                 dropout_rate=0.0,
+                 dropout_rescale=True):
+        '''
+        Initialize an LSTM layer.  For details on what the parameters mean, see
+        (7-11) from [#graves2014generating]_.
+
+        :parameters:
+            - input_layer : layers.Layer
+                Input to this recurrent layer
+            - num_units : int
+                Number of hidden units
+            - W_in_to_gates : function or np.ndarray or theano.shared
+            - W_hid_to_gates : function or np.ndarray or theano.shared
+            - W_cell_to_gates : function or np.ndarray or theano.shared
+            - b_gates : function or np.ndarray or theano.shared
+            - nonlinearity_ingate : function
+            - nonlinearity_forgetgate : function
+            - nonlinearity_modulationgate : function
+            - nonlinearity_outgate : function
+            - nonlinearity_out : function
+            - cell_init : function or np.ndarray or theano.shared
+                :math:`c_0`
+            - hid_init : function or np.ndarray or theano.shared
+                :math:`h_0`
+            - learn_init : boolean
+                If True, initial hidden values are learned
+            - peepholes : boolean
+                If True, the LSTM uses peephole connections.
+                When False, W_cell_to_ingate, W_cell_to_forgetgate and
+                W_cell_to_outgate are ignored.
+            - dropout_rate: dropout probability on non recurrent conncections
+            - dropout_rescale: rescale dropout connections or not
+        '''
+
+
+        # Initialize parent layer
+        super(BidirectionalLSTMLayer, self).__init__(input_layer)
+
+        # For any of the nonlinearities, if None is supplied, use identity
+        if nonlinearity_ingate is None:
+            self.nonlinearity_ingate = nonlinearities.identity
+        else:
+            self.nonlinearity_ingate = nonlinearity_ingate
+
+        if nonlinearity_forgetgate is None:
+            self.nonlinearity_forgetgate = nonlinearities.identity
+        else:
+            self.nonlinearity_forgetgate = nonlinearity_forgetgate
+
+        if nonlinearity_modulationgate is None:
+            self.nonlinearity_modulationgate = nonlinearities.identity
+        else:
+            self.nonlinearity_modulationgate = nonlinearity_modulationgate
+
+        if nonlinearity_outgate is None:
+            self.nonlinearity_outgate = nonlinearities.identity
+        else:
+            self.nonlinearity_outgate = nonlinearity_outgate
+
+        if nonlinearity_out is None:
+            self.nonlinearity_out = nonlinearities.identity
+        else:
+            self.nonlinearity_out = nonlinearity_out
+
+        self.learn_init = learn_init
+        self.num_units = num_units
+        self.peepholes = peepholes
+        self.dropout_rate = dropout_rate
+        self.dropout_rescale = dropout_rescale
+
+        # Input dimensionality is the output dimensionality of the input layer
+        (num_batch, _, num_inputs) = self.input_layer.get_output_shape()
+
+        if self.peepholes:
+            self.W_cell_to_gates = self.create_param(
+                W_cell_to_gates, (2, 3*num_units))
+        self.b_gates = self.create_param(
+            b_gates, (2, 4*num_units))
+        self.W_hid_to_gates = self.create_param(
+            W_hid_to_gates, (2, num_units, 4*num_units))
+        self.W_in_to_gates = self.create_param(
+            W_in_to_gates, (2, num_inputs,4*num_units))
+
+        # Setup initial values for the cell and the lstm hidden units
+        self.cell_init_fwd = self.create_param(
+            cell_init, (num_batch, num_units))
+        self.hid_init_fwd = self.create_param(hid_init, (num_batch, num_units))
+        self.cell_init_bck = self.create_param(
+            cell_init, (num_batch, num_units))
+        self.hid_init_bck = self.create_param(hid_init, (num_batch, num_units))
+
+    def get_params(self):
+        '''
+        Get all parameters of this layer.
+
+        :returns:
+            - params : list of theano.shared
+                List of all parameters
+        '''
+        params = self.get_weight_params() + self.get_bias_params()
+        if self.peepholes:
+            params.extend(self.get_peephole_params())
+
+        if self.learn_init:
+            params.extend(self.get_init_params())
+
+        return params
+
+    def get_weight_params(self):
+        '''
+        Get all weights of this layer
+        :returns:
+            - weight_params : list of theano.shared
+                List of all weight parameters
+        '''
+        return [self.W_in_to_gates, self.W_hid_to_gates]
+
+    def get_peephole_params(self):
+        '''
+        Get all peephole parameters of this layer.
+        :returns:
+            - init_params : list of theano.shared
+                List of all peephole parameters
+        '''
+        return [self.W_cell_to_gates, self.W_cell_to_gates]
+
+    def get_init_params(self):
+        '''
+        Get all initital parameters of this layer.
+        :returns:
+            - init_params : list of theano.shared
+                List of all initial parameters
+        '''
+        return [self.hid_init_fwd, self.cell_init_fwd,
+                self.hid_init_bck, self.cell_init_bck]
+
+    def get_bias_params(self):
+        '''
+        Get all bias parameters of this layer.
+
+        :returns:
+            - bias_params : list of theano.shared
+                List of all bias parameters
+        '''
+        return [self.b_gates]
+
+    def get_output_shape_for(self, input_shape):
+        '''
+        Compute the expected output shape given the input.
+
+        :parameters:
+            - input_shape : tuple
+                Dimensionality of expected input
+
+        :returns:
+            - output_shape : tuple
+                Dimensionality of expected outputs given input_shape
+        '''
+        return (input_shape[0], input_shape[1], 2*self.num_units)
+
+    def get_output_for(self, input_fwd, mask=None, deterministic=False,
+                       *args, **kwargs):
         '''
         Compute this layer's output function given a symbolic input variable
 
@@ -349,102 +667,149 @@ class RECURRENTTEST(Layer):
                 sequence in the batch is part of the sequence or not.  This is
                 needed when scanning backwards.  If all sequences are of the
                 same length, it should be all 1s.
-            - deterministic : boolean
-                Controls if dropout if applied or not, Should be true when
-                testing.
 
         :returns:
             - layer_output : theano.TensorType
                 Symbolic output variable
         '''
 
-        if self.backwards and mask == None:
-            assert False
+        assert mask is not None, "Mask must be given for bidirectional layer"
 
         # Treat all layers after the first as flattened feature dimensions
-        if input.ndim > 3:
-            input = input.reshape((input.shape[0], input.shape[1],
-                                   T.prod(input.shape[2:])))
+        if input_fwd.ndim > 3:
+            input_fwd = input.reshape((input_fwd.shape[0], input_fwd.shape[1],
+                                   T.prod(input_fwd.shape[2:])))
 
-        # Create single recurrent computation step function
-        if self.type == 'LSTM':
-            def sliceW(x, n):
-                return x[:, n*self.num_units:(n+1)*self.num_units]
-            def slicePeep(x, n):
-                return x[n*self.num_units:(n+1)*self.num_units]
-            def step(W_xx_n, c_pt, h_pt,):
-                # size
-                #   W_xx_n: batch_size, 3*self.num_units
-                #   c_pt, h_pt  batch_size x n_hid
-                gates = W_xx_n + T.dot(h_pt, self.W_h)
-                i_t = self.non_lin_i(sliceW(gates, 0))
-                f_t = self.non_lin_f(sliceW(gates, 1))
-                o_t = self.non_lin_o(sliceW(gates, 2))
-                g_t = self.non_lin_g(sliceW(gates, 3))
-                if self.peepholes:
-                    i_t += c_pt*slicePeep(self.W_c, 0)
-                    f_t += c_pt*slicePeep(self.W_c, 1)
-                    o_t += c_pt*slicePeep(self.W_c, 2)
-                c_t = (f_t*c_pt + i_t*g_t)
-                h_t = o_t*self.non_lin_out(c_t)
-                return [c_t, h_t]
-        def stepbck(W_xx_n, mask, c_pt, h_pt):
-            c_t, h_t = step(W_xx_n, c_pt, h_pt)
-            not_mask = 1-mask
-            c_out = c_t*mask + not_mask*c_pt
-            h_out = h_t*mask + not_mask*h_pt
-            return [c_out, h_out]
-
-
-        if self.type == 'RNN':
-            def step(W_xx_n, h_pt):
-                h_t = self.non_lin_out(W_xx_n + T.dot(h_pt, self.W_h))
-                return [h_t]
-            def stepbck(W_x, mask, h_pt):
-                h_t  = step(W_x, h_pt)[0]
-                not_mask = 1-mask
-                h_out = h_t*mask + not_mask*h_pt
-                return [h_out]
-
-
+        # dropout function
         def D(x):
-            batch_size, seq_length, num_inputs = self.input_layer.get_output_shape()
-            shape = (seq_length, batch_size, self.n_gates*self.num_units)
+            batch_size, seq_length, _ = self.input_layer.get_output_shape()
+            shape = (seq_length, batch_size, 4*self.num_units)
             retain_prob = 1 - self.dropout_rate
             if self.dropout_rescale:
                 x /= retain_prob
             return x * utils.floatX(
                 _srng.binomial(shape, p=retain_prob, dtype='int32'))
 
-
-        # input is batch_size batch_size x seq_len x n_input
+        # precompute inputs*W and dimshuffle
+        # Input is provided as (n_batch, n_time_steps, n_features)
+        # W _in_to_gates is (n_features, 4*num_units). input dot W is then
+        # (n_batch, n_time_steps, 4*num_units). Because scan iterate over the
+        # first dimension we dimshuffle to (n_time_steps, n_batch, n_features)
+        # flip input and mask if we ar going backwards
+        input_bck = input_fwd[:, ::-1, :]
+        mask_bck = mask[:, ::-1]
         if deterministic or self.dropout_rate == 0:
-            W_xx = T.dot(input,self.W_x).dimshuffle(1, 0, 2) + self.b
+            input_dot_W_fwd = T.dot(
+                input_fwd, self.W_in_to_gates[0]).dimshuffle(1, 0, 2)
+            input_dot_W_bck = T.dot(
+                input_bck, self.W_in_to_gates[1]).dimshuffle(1, 0, 2)
         else:
-            W_xx = D(T.dot(input,self.W_x).dimshuffle(1, 0, 2)) + self.b
+            input_dot_W_fwd = D(
+                T.dot(input_fwd, self.W_in_to_gates[0]).dimshuffle(1, 0, 2))
+            input_dot_W_bck = D(
+                T.dot(input_bck, self.W_in_to_gates[1]).dimshuffle(1, 0, 2))
 
-        if self.backwards:
-            mask = mask.dimshuffle(1, 0, 2)
-            sequences = [W_xx, mask]
-            fun = stepbck
-        else:  # fwd
-            sequences = [W_xx]
-            fun = step
 
-        output = theano.scan(
-            fun, sequences=sequences, go_backwards=self.backwards,
-            outputs_info=self.init_params)
+        input_dot_W_fwd += self.b_gates[0]
+        input_dot_W_bck += self.b_gates[1]
 
-        if self.type == 'LSTM':
-            output = output[0][1]
-        elif self.type == 'RNN':
-            output = output[0]
 
-        # Now, dimshuffle back to (n_batch, n_time_steps, n_features))
+        # mask is given as (batch_size, seq_len) or (batch_size, seq_len).
+        # Because scan iterates over
+        # first dim. If mask is 2d we dimshuffle to (seq_len, batch_size) and
+        # add a broadcastable dimension. If 3d assume that third dim is
+        # broadcastable.
+        if mask_bck.ndim == 2:
+            mask_bck = mask_bck.dimshuffle(1, 0, 'x')
+        else:
+            assert mask_bck.broadcastable == (false, false, true), \
+                "When mask is 3d the last dimension must be boadcastable"
+            mask_bck = mask_bck.dimshuffle(1, 0, 2)
+
+
+        # input_dow_w is (n_batch, n_time_steps, 4*num_units). We define a
+        # slicing function that extract the input to each LSTM gate
+        # slice_c is similar but for peephole weights.
+        def slice_w(x, n):
+            return x[:, n*self.num_units:(n+1)*self.num_units]
+        def slice_c(x, n):
+            return x[n*self.num_units:(n+1)*self.num_units]
+
+        # Create single recurrent computation step function.
+        # Calculates both the forward and the backward pass.
+        # The step function calculates the following:
+        #
+        # i_t = \sigma(W_{xi}x_t + W_{hi}h_{t-1} + W_{ci}c_{t-1} + b_i)
+        # f_t = \sigma(W_{xf}x_t + W_{hf}h_{t-1} + W_{cf}c_{t-1} + b_f)
+        # c_t = f_tc_{t - 1} + i_t\tanh(W_{xc}x_t + W_{hc}h_{t-1} + b_c)
+        # o_t = \sigma(W_{xo}x_t + W_{ho}h_{t-1} + W_{co}c_t + b_o)
+        # h_t = o_t \tanh(c_t)
+        #
+        # Gate names are taken from http://arxiv.org/abs/1409.2329 figure 1
+        def dostep(input_dot_W_n, cell_previous, hid_previous, idx):
+
+            # calculate gates pre-activations and slice
+            gates = input_dot_W_n + T.dot(hid_previous, self.W_hid_to_gates[idx])
+            ingate = slice_w(gates,0)
+            forgetgate = slice_w(gates,1)
+            modulationgate = slice_w(gates,2)
+            outgate = slice_w(gates,3)
+
+            if self.peepholes:
+                ingate += cell_previous*slice_c(self.W_cell_to_gates[idx], 0)
+                forgetgate = cell_previous*slice_c(self.W_cell_to_gates[idx], 1)
+                outgate = cell_previous*slice_c(self.W_cell_to_gates[idx], 2)
+
+            ingate = self.nonlinearity_ingate(ingate)
+            forgetgate = self.nonlinearity_forgetgate(forgetgate)
+            modulationgate = self.nonlinearity_modulationgate(modulationgate)
+            outgate = self.nonlinearity_outgate(outgate)
+
+            cell = forgetgate*cell_previous + ingate*modulationgate
+            hid = outgate*self.nonlinearity_out(cell)
+            return cell, hid
+
+
+        def step(input_dot_W_fwd_n, input_dot_W_bck_n, mask_bck,
+                cell_previous_fwd, hid_previous_fwd,
+                cell_previous_bck, hid_previous_bck):
+
+            #forward
+            cell_fwd, hid_fwd = dostep(
+                input_dot_W_fwd_n, cell_previous_fwd, hid_previous_fwd,0)
+            # backward
+            cell_bck, hid_bck = dostep(
+                input_dot_W_bck_n, cell_previous_bck, hid_previous_bck,1)
+
+            # If mask is 0, use previous state until mask = 1 is found.
+            # This propagates the layer initial state when moving backwards
+            # until the end of the sequence is found.
+            not_mask_bck = 1 - mask_bck
+            cell_bck = cell_bck*mask_bck + cell_previous_bck*not_mask_bck
+            hid_bck = hid_fwd*mask_bck + hid_previous_bck*not_mask_bck
+
+            return [cell_fwd, hid_fwd, cell_bck, hid_bck]
+
+        sequences = [input_dot_W_fwd, input_dot_W_bck, mask_bck]
+        init = [self.cell_init_fwd, self.hid_init_fwd,
+                self.cell_init_bck, self.hid_init_bck]
+
+        # Scan op iterates over first dimension of input and repeatedly
+        # applied the step function
+        scan_out = theano.scan(step, sequences=sequences, outputs_info=init)#[0][1]
+
+        # output is  (n_time_steps, n_batch, n_units))
+        output_fwd = scan_out[0][1]
+        output_bck = scan_out[0][3] # this should be 3 but it does not compile
+
+        # reverse bck output
+        output_bck = output_bck[::-1, :, :]
+
+        # concateante fwd and bck
+        output = T.concatenate([output_fwd, output_bck], axis=2)
+
+
+        # Now, dimshuffle back to (n_batch, n_time_steps, n_units))
         output = output.dimshuffle(1, 0, 2)
 
-        # always return output from t=0 to t=n
-        if self.backwards:
-            output = output[:, ::-1, :]
         return output
-
