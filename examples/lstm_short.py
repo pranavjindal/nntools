@@ -14,7 +14,7 @@ theano.scan.allow_gc=False
 #theano.config.mode = 'FAST_COMPILE'
 theano.config.mode = 'FAST_RUN'
 #theano.config.mode = 'DEBUG_MODE'
-theano.config.compute_test_value = 'raise'
+#theano.config.compute_test_value = 'raise'
 #theano.config.optimizer = None
 #theano.config.exception_verbosity='high'
 
@@ -148,17 +148,18 @@ sym_input.tag.test_value = \
 ####################
 # Setup Bidirectional LSTM
 ####################
-manual = True
+# either manually or using the createmodel helper
+manual = False
 if manual:
-    peepholes = False
+    peepholes = True
     l_in = lasagne.layers.InputLayer(shape=(BATCH_SIZE, MAX_SEQ_LENGTH, N_FEATURES))
     #l_in = lasagne.layers.GaussianNoiseLayer(l_in, sigma=0.6)
     recout = lasagne.layers.BidirectionalLSTMLayer(
-        l_in, num_units=3, dropout_rate=0.0, peepholes=peepholes, learn_init=False)
+        l_in, num_units=3, dropout_rate=0.0, peepholes=peepholes, learn_init=True)
     recout = lasagne.layers.BidirectionalLSTMLayer(
-        recout, num_units=4, dropout_rate=0.0, peepholes=peepholes, learn_init=False)
+        recout, num_units=4, dropout_rate=0.0, peepholes=peepholes, learn_init=True)
     recout = lasagne.layers.BidirectionalLSTMLayer(
-        recout, num_units=5, dropout_rate=0.0, peepholes=peepholes, learn_init=False)
+        recout, num_units=5, dropout_rate=0.0, peepholes=peepholes, learn_init=True)
     l_reshape = lasagne.layers.ReshapeLayer(
         recout,  (BATCH_SIZE*MAX_SEQ_LENGTH, recout.get_output_shape()[-1]))
     l_reshape = lasagne.layers.DenseLayer(
