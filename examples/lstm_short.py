@@ -22,14 +22,14 @@ theano.config.mode = 'FAST_RUN'
 import theano.tensor as T
 import numpy as np
 import time
-from ConfusionMatrix import ConfusionMatrix          # confusion matrix class, ported from torch
-from LSTMTrainingFunctions import savemodel
-from LSTMTrainingFunctions import loadmodel
-from LSTMTrainingFunctions import adadelta_normscaled
-from LSTMTrainingFunctions import nesterov_normscaled
-from LSTMTrainingFunctions import padtobatchmultiplesimple
-from LSTMTrainingFunctions import createmodel
-from training_data_funcs import *
+from lasagne.ConfusionMatrix import ConfusionMatrix          # confusion matrix class, ported from torch
+from lasagne.LSTMTrainingFunctions import savemodel
+from lasagne.LSTMTrainingFunctions import loadmodel
+from lasagne.LSTMTrainingFunctions import adadelta_normscaled
+from lasagne.LSTMTrainingFunctions import nesterov_normscaled
+from lasagne.LSTMTrainingFunctions import padtobatchmultiplesimple
+from lasagne.LSTMTrainingFunctions import createmodel
+from lasagne.training_data_funcs import *
 
 
 import logging
