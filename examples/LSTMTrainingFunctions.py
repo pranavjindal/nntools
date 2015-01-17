@@ -51,6 +51,7 @@ def prederrrate(output, target_output, mask,db='Y_PRED_ERRORS:',verbose=False):
 
 # class for clipping gradient. Not uses atm
 # apply around loss, T.grad(grad_clip(loss), all_params)
+#rom theano import ifelse
 class GradClip(theano.compile.ViewOp):
 
     def __init__(self, clip_lower_bound, clip_upper_bound):
@@ -59,7 +60,13 @@ class GradClip(theano.compile.ViewOp):
         assert(self.clip_upper_bound >= self.clip_lower_bound)
 
     def grad(self, args, g_outs):
-        return [T.clip(g_out, self.clip_lower_bound, self.clip_upper_bound) for g_out in g_outs]
+        def pgrad(g_out):
+            g_out = T.clip(g_out, self.clip_lower_bound, self.clip_upper_bound)
+            g_out = ifelse(T.any(T.isnan(g_out)),
+            T.ones_like(g_out)*0.00001,
+            g_out)
+            return g_out
+        return [pgrad(g_out) for g_out in g_outs]
 
 grad_clip = GradClip(-1.0, 1.0)
 T.opt.register_canonicalize(theano.gof.OpRemove(grad_clip), name='grad_clip')
