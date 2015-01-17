@@ -134,8 +134,7 @@ sh_target = theano.shared(
 
 sh_mask = theano.shared(np.zeros(shape=(BATCH_SIZE, MAX_SEQ_LENGTH, 1),
                 dtype=theano.config.floatX), borrow=True,
-                broadcastable=(False, False, True)) #<---IMPORTANT Allows to multiply m x n x 1 matrix with m x n x z mat
-
+                broadcastable=(False, False, True))
 # testing values
 sym_target.tag.test_value = \
     (np.random.rand(BATCH_SIZE, MAX_SEQ_LENGTH)>0.3).astype('int32')
@@ -155,15 +154,11 @@ if manual:
     l_in = lasagne.layers.InputLayer(shape=(BATCH_SIZE, MAX_SEQ_LENGTH, N_FEATURES))
     #l_in = lasagne.layers.GaussianNoiseLayer(l_in, sigma=0.6)
     recout = lasagne.layers.BidirectionalLSTMLayer(
-        l_in, num_units=102, dropout_rate=0.0, peepholes=peepholes, learn_init=True)
+        l_in, num_units=102, dropout_rate=0.1, peepholes=peepholes, learn_init=True)
     recout = lasagne.layers.BidirectionalLSTMLayer(
-        recout, num_units=156, dropout_rate=0.0, peepholes=peepholes, learn_init=True)
-    #recout = lasagne.layers.BidirectionalLSTMLayer(
-    #    recout, num_units=5, dropout_rate=0.0, peepholes=peepholes, learn_init=True)
+        recout, num_units=156, dropout_rate=0.1, peepholes=peepholes, learn_init=True)
     l_reshape = lasagne.layers.ReshapeLayer(
         recout,  (BATCH_SIZE*MAX_SEQ_LENGTH, recout.get_output_shape()[-1]))
-    #l_reshape = lasagne.layers.DenseLayer(
-    #    l_reshape, num_units=7, nonlinearity=lasagne.nonlinearities.rectify)
     l_rec_out = lasagne.layers.DenseLayer(
         l_reshape, num_units=N_CLASSES, nonlinearity=lasagne.nonlinearities.softmax)
     l_out = lasagne.layers.ReshapeLayer(
