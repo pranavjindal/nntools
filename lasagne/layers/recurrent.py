@@ -210,7 +210,7 @@ class LSTMLayer(Layer):
                  nonlinearity_out=nonlinearities.tanh,
                  cell_init=init.Constant(0.),
                  hid_init=init.Constant(0.),
-                 learn_init=False,
+                 learn_init=True,
                  peepholes=True,
                  dropout_rate=0.0,
                  dropout_rescale=True):
@@ -490,9 +490,11 @@ class BidirectionalLSTMLayer(Layer):
                  nonlinearity_modulationgate=nonlinearities.tanh,
                  nonlinearity_outgate=nonlinearities.sigmoid,
                  nonlinearity_out=nonlinearities.tanh,
-                 cell_init=init.Constant(0.),
-                 hid_init=init.Constant(0.),
-                 learn_init=False,
+                 cell_init_fwd=init.Constant(0.),
+                 hid_init_fwd=init.Constant(0.),
+                 cell_init_bck=init.Constant(0.),
+                 hid_init_bck=init.Constant(0.),
+                 learn_init=True,
                  peepholes=True,
                  dropout_rate=0.0,
                  dropout_rescale=True):
@@ -514,8 +516,7 @@ class BidirectionalLSTMLayer(Layer):
             - nonlinearity_modulationgate : function
             - nonlinearity_outgate : function
             - nonlinearity_out : function
-            - cell_init : function or np.ndarray or theano.shared
-                :math:`c_0`
+            - init : function or np.ndarray or theano.shared
             - hid_init : function or np.ndarray or theano.shared
                 :math:`h_0`
             - learn_init : boolean
@@ -579,18 +580,18 @@ class BidirectionalLSTMLayer(Layer):
 
         # Setup initial values for the cell and the lstm hidden units
         self.cell_init_fwd = self.create_param(
-            cell_init, (num_batch, num_units))
-        self.hid_init_fwd = self.create_param(hid_init, (num_batch, num_units))
+            cell_init_fwd, (num_batch, num_units))
+        self.hid_init_fwd = self.create_param(hid_init_fwd, (num_batch, num_units))
         self.cell_init_bck = self.create_param(
-            cell_init, (num_batch, num_units))
-        self.hid_init_bck = self.create_param(hid_init, (num_batch, num_units))
-
+            cell_init_bck, (num_batch, num_units))
+        self.hid_init_bck = self.create_param(hid_init_bck, (num_batch, num_units))
         #names for debugging
         if self.peepholes:
             self.W_cell_to_gates.name = "W_cell_to_gates"
         self.b_gates.name = "b_gates"
         self.W_hid_to_gates.name = "W_hid_to_gates"
         self.W_in_to_gates.name = "W_in_to_gates"
+
         self.cell_init_fwd.name = "cell_init_fwd"
         self.hid_init_fwd.name = "hid_init_fwd"
         self.cell_init_bck.name = "cell_init_bck"
@@ -709,6 +710,7 @@ class BidirectionalLSTMLayer(Layer):
         # flip input and mask if we ar going backwards
         input_bck = input_fwd[:, ::-1, :]
         mask_bck = mask[:, ::-1]
+        #set_subtensor(x, y, inplace=False, tolerate_inplace_aliasing=False)
         if deterministic or self.dropout_rate == 0:
             input_dot_W_fwd = T.dot(
                 input_fwd, self.W_in_to_gates[0]).dimshuffle(1, 0, 2)
@@ -781,16 +783,16 @@ class BidirectionalLSTMLayer(Layer):
             return cell, hid
 
 
-        def step(input_dot_W_fwd_n, input_dot_W_bck_n, mask_bck,
+        def step(input_dot_W_fwd, input_dot_W_bck, mask_bck,
                 cell_previous_fwd, hid_previous_fwd,
                 cell_previous_bck, hid_previous_bck):
 
             #forward
             cell_fwd, hid_fwd = dostep(
-                input_dot_W_fwd_n, cell_previous_fwd, hid_previous_fwd, 0)
+                input_dot_W_fwd, cell_previous_fwd, hid_previous_fwd, 0)
             # backward
             cell_bck, hid_bck = dostep(
-                input_dot_W_bck_n, cell_previous_bck, hid_previous_bck, 1)
+                input_dot_W_bck, cell_previous_bck, hid_previous_bck, 1)
 
             # If mask is 0, use previous state until mask = 1 is found.
             # This propagates the layer initial state when moving backwards
@@ -803,7 +805,7 @@ class BidirectionalLSTMLayer(Layer):
 
         sequences = [input_dot_W_fwd, input_dot_W_bck, mask_bck]
         init = [self.cell_init_fwd, self.cell_init_bck,
-                self.hid_init_bck, self.hid_init_bck]
+                self.hid_init_fwd, self.hid_init_bck]
 
         # Scan op iterates over first dimension of input and repeatedly
         # applied the step function

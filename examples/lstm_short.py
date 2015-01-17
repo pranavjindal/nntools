@@ -148,22 +148,38 @@ sym_input.tag.test_value = \
 ####################
 # Setup Bidirectional LSTM
 ####################
+manual = True
+if manual:
+    peepholes = False
+    l_in = lasagne.layers.InputLayer(shape=(BATCH_SIZE, MAX_SEQ_LENGTH, N_FEATURES))
+    #l_in = lasagne.layers.GaussianNoiseLayer(l_in, sigma=0.6)
+    recout = lasagne.layers.BidirectionalLSTMLayer(
+        l_in, num_units=3, dropout_rate=0.0, peepholes=peepholes, learn_init=False)
+    recout = lasagne.layers.BidirectionalLSTMLayer(
+        recout, num_units=4, dropout_rate=0.0, peepholes=peepholes, learn_init=False)
+    recout = lasagne.layers.BidirectionalLSTMLayer(
+        recout, num_units=5, dropout_rate=0.0, peepholes=peepholes, learn_init=False)
+    l_reshape = lasagne.layers.ReshapeLayer(
+        recout,  (BATCH_SIZE*MAX_SEQ_LENGTH, recout.get_output_shape()[-1]))
+    l_reshape = lasagne.layers.DenseLayer(
+        l_reshape, num_units=7, nonlinearity=lasagne.nonlinearities.rectify)
+    l_rec_out = lasagne.layers.DenseLayer(
+        l_reshape, num_units=N_CLASSES, nonlinearity=lasagne.nonlinearities.softmax)
+    l_out = lasagne.layers.ReshapeLayer(
+        l_rec_out, (BATCH_SIZE, MAX_SEQ_LENGTH, N_CLASSES))
+else:
+    l_out, _, l_in = createmodel(rnn_layer_layers=[3,4,5],
+                         isbrnn=True,
+                         batch_size=BATCH_SIZE,
+                         n_features=N_FEATURES,
+                         n_classes=N_CLASSES,
+                         layer_type_rnn="LSTMFAST",
+                         padded_seq_len=MAX_SEQ_LENGTH,
+                         output_layers=[7],
+                         input_layers=None,
+                         learn_init=True,
+                         final_output_layer="softmax")
 
-l_in = lasagne.layers.InputLayer(shape=(BATCH_SIZE, MAX_SEQ_LENGTH, N_FEATURES))
-#l_in = lasagne.layers.GaussianNoiseLayer(l_in, sigma=0.6)
-recout = lasagne.layers.BidirectionalLSTMLayer(
-    l_in, num_units=3, dropout_rate=0.0)
-recout = lasagne.layers.BidirectionalLSTMLayer(
-    recout, num_units=4, dropout_rate=0.0)
-recout = lasagne.layers.BidirectionalLSTMLayer(recout, num_units=5)
-l_reshape = lasagne.layers.ReshapeLayer(
-    recout,  (BATCH_SIZE*MAX_SEQ_LENGTH, recout.get_output_shape()[-1]))
-
-l_rec_out = lasagne.layers.DenseLayer(
-    l_reshape, num_units=N_CLASSES,
-    nonlinearity=lasagne.nonlinearities.softmax)
-l_out = lasagne.layers.ReshapeLayer(l_rec_out,
-                                    (BATCH_SIZE, MAX_SEQ_LENGTH, N_CLASSES))
 
 # createnet in LSTMTrainingFunctions can setup networks with a number of
 # different architectures.
@@ -198,12 +214,14 @@ input_dict = {l_in: sym_input}
 # graphs.
 # When we use backwards LSTM's a symbolic variable representing mask must be
 # given as argument.
+print "CREATING COST FUNCTIONS...",
 cost_train = costfun(
     l_out.get_output(input_dict, deterministic=False,mask=sym_mask),
     sym_target, sym_mask, db='COST TRAIN:')
 cost_val = costfun(
     l_out.get_output(input_dict, deterministic=True,mask=sym_mask),
     sym_target, sym_mask, db='COST VAL:')
+print "DONE"
 
 
 # Get a list of all parameters in the network
@@ -217,8 +235,9 @@ all_params = lasagne.layers.get_all_params(l_out)
 #    cost_train, all_params,batch_size=BATCH_SIZE,learning_rate=1.0,
 #    epsilon=10e-6, max_norm=0.02, verbose=VERBOSE)
 
+print "CALCULATING UPDATES...",
 updates = nesterov_normscaled( cost_train, all_params, 0.01, 0.5, BATCH_SIZE)
-
+print "DONE"
 
 # print number of params
 total_params = sum([p.get_value().size for p in all_params])
@@ -238,11 +257,14 @@ givens_preds = [(sym_input, sh_input), (sym_mask, sh_mask)]
 # takes no input because the inputs are specified with the givens argument.
 # We compile cost_train and specify that the parameters should be updated
 # using the adadelta update rules.
+print "COMPILING FUNCTIONS...TRAIN",
 train = theano.function([], cost_train, updates=updates, givens=givens)
+print "...COST-VAL...",
 compute_cost_val = theano.function([], cost_val, givens=givens)
+print "...preds..."
 compute_preds = theano.function([], l_out.get_output(input_dict, determinist=True, mask=sym_mask),
                                   givens=givens_preds)
-
+print "Done"
 ####################################################################
 #           TRAINING LOOP                                          #
 ####################################################################
