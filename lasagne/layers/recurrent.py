@@ -813,7 +813,7 @@ class BidirectionalLSTMLayer(Layer):
 
         # output is  (n_time_steps, n_batch, n_units))
         output_fwd = scan_out[0][2]
-        output_bck = scan_out[0][3] # this should be 3 but it does not compile
+        output_bck = scan_out[0][3]
 
         # reverse bck output
         output_bck = output_bck[::-1, :, :]

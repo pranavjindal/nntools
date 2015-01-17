@@ -36,7 +36,7 @@ import logging
 np.random.seed(1234)
 BATCH_SIZE = 64
 N_EPOCHS =  100
-VERBOSE = False
+VERBOSE = True
 N_HID = 100
 
 
@@ -149,21 +149,21 @@ sym_input.tag.test_value = \
 # Setup Bidirectional LSTM
 ####################
 # either manually or using the createmodel helper
-manual = False
+manual = True
 if manual:
     peepholes = True
     l_in = lasagne.layers.InputLayer(shape=(BATCH_SIZE, MAX_SEQ_LENGTH, N_FEATURES))
     #l_in = lasagne.layers.GaussianNoiseLayer(l_in, sigma=0.6)
     recout = lasagne.layers.BidirectionalLSTMLayer(
-        l_in, num_units=3, dropout_rate=0.0, peepholes=peepholes, learn_init=True)
+        l_in, num_units=102, dropout_rate=0.0, peepholes=peepholes, learn_init=True)
     recout = lasagne.layers.BidirectionalLSTMLayer(
-        recout, num_units=4, dropout_rate=0.0, peepholes=peepholes, learn_init=True)
-    recout = lasagne.layers.BidirectionalLSTMLayer(
-        recout, num_units=5, dropout_rate=0.0, peepholes=peepholes, learn_init=True)
+        recout, num_units=156, dropout_rate=0.0, peepholes=peepholes, learn_init=True)
+    #recout = lasagne.layers.BidirectionalLSTMLayer(
+    #    recout, num_units=5, dropout_rate=0.0, peepholes=peepholes, learn_init=True)
     l_reshape = lasagne.layers.ReshapeLayer(
         recout,  (BATCH_SIZE*MAX_SEQ_LENGTH, recout.get_output_shape()[-1]))
-    l_reshape = lasagne.layers.DenseLayer(
-        l_reshape, num_units=7, nonlinearity=lasagne.nonlinearities.rectify)
+    #l_reshape = lasagne.layers.DenseLayer(
+    #    l_reshape, num_units=7, nonlinearity=lasagne.nonlinearities.rectify)
     l_rec_out = lasagne.layers.DenseLayer(
         l_reshape, num_units=N_CLASSES, nonlinearity=lasagne.nonlinearities.softmax)
     l_out = lasagne.layers.ReshapeLayer(
@@ -232,12 +232,12 @@ all_params = lasagne.layers.get_all_params(l_out)
 # calculate the gradients and update rules w.r.t to each parameter.
 # We use adadelta, which automatically tunes the learning rate.
 # adadelta_normscaled returns a list of update rules for each parameter
-#updates = adadelta_normscaled(
-#    cost_train, all_params,batch_size=BATCH_SIZE,learning_rate=1.0,
-#    epsilon=10e-6, max_norm=0.02, verbose=VERBOSE)
+updates = adadelta_normscaled(
+    cost_train, all_params,batch_size=BATCH_SIZE,learning_rate=1.0,
+    epsilon=10e-6, max_norm=0.02, verbose=VERBOSE)
 
 print "CALCULATING UPDATES...",
-updates = nesterov_normscaled( cost_train, all_params, 0.01, 0.5, BATCH_SIZE)
+#updates = nesterov_normscaled( cost_train, all_params, 0.01, 0.5, BATCH_SIZE)
 print "DONE"
 
 # print number of params
