@@ -5,7 +5,7 @@ The code is a fork of work by Colin Raffel (https://github.com/craffel).
 The main contributions are:
 
 *  Faster LSTM/RNN implementation
-*  Bidirectional LSTM/RNN
+*  Bidirectional LSTM/RNN - BidirectionalLSTMLayer
 *  LSTM Dropout  (http://arxiv.org/abs/1409.2329)
 *  Setupfunctions
 *  Learned activation units + other activation funtions (http://arxiv.org/abs/1412.6830)
@@ -26,7 +26,7 @@ Run:
 
 ```PYTHON
 python examples/lstm_long.py
-python examples/lstm_shor.py
+python examples/lstm_short.py
 ```
 
 for example code.
