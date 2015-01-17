@@ -177,7 +177,7 @@ def adadelta_normscaled(loss, all_params,batch_size=1,max_norm=np.inf,
 
 
     #all_grads = [theano.grad(loss, param) for param in all_params]
-    all_grads = theano.grad(loss,all_params)
+    all_grads = theano.grad(grad_clip(loss),all_params)
 
     if max_norm > 0:
         all_grads = apply_max_norm(all_grads)
