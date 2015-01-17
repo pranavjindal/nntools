@@ -151,48 +151,18 @@ sym_input.tag.test_value = \
 # Setup Bidirectional LSTM
 ####################
 
-l_in = lasagne.layers.InputLayer(shape=(BATCH_SIZE, MAX_SEQ_LENGTH, N_FEATURES))
-
-
-# setup fwd and bck LSTM layer.
-l_fwd1 = lasagne.layers.RECURRENTTEST(
-    l_in, N_HID, backwards=False, learn_init=True, peepholes=True,
-    type='LSTM', dropout_rate=0.1)
-l_bck1 = lasagne.layers.RECURRENTTEST(
-    l_in, N_HID, backwards=True, learn_init=True, peepholes=True,
-    type='LSTM', dropout_rate=0.1)
-
-# concatenate forward and backward LSTM layers
-l_concat1 = lasagne.layers.ConcatLayer([l_fwd1, l_bck1], axis=2)
-
-# add second layer
-l_fwd2 = lasagne.layers.RECURRENTTEST(
-    l_concat1, N_HID, backwards=False, learn_init=True, peepholes=False,
-    type='LSTM', dropout_rate=0.1)
-l_bck2 = lasagne.layers.RECURRENTTEST(
-    l_concat1, N_HID, backwards=True, learn_init=True, peepholes=False,
-    type='LSTM', dropout_rate=0.1)
-l_concat2 = lasagne.layers.ConcatLayer([l_fwd2, l_bck2], axis=2)
-
-
-# The output from Recurrent unts is (BATCH_SIZE, MAX_SEQ_LENGTH, LAST_LSTM_NUM_UNITS)
-# Feedforward layers expect Batches x n_features. Use a reshape layer
-lstm_out = lasagne.layers.ReshapeLayer(
-    l_concat2, (BATCH_SIZE*MAX_SEQ_LENGTH, l_concat2.get_output_shape()[-1]))
-
-
-# add Relu Layer with dropout on top. Other non linearities are
-# available in lasagne/nonlinearities
-dense_out = lasagne.layers.DenseLayer(
-    lstm_out, num_units=N_HID, nonlinearity=lasagne.nonlinearities.rectify)
-dropout_out = lasagne.layers.DropoutLayer(lstm_out, p=0.2)
-
-# add softmax output
-softmax_out = lasagne.layers.DenseLayer(
-    dropout_out, num_units=N_CLASSES, nonlinearity=lasagne.nonlinearities.softmax)
-
-# reshape to sequence format
-l_out = lasagne.layers.ReshapeLayer(softmax_out, (BATCH_SIZE, MAX_SEQ_LENGTH, N_CLASSES))
+l_in = lasagne.layers.InputLayer(shape=(BATCH_SIZE, MAX_SEQ_LENGTH, X_val.shape[-1]))
+l_in = lasagne.layers.GaussianNoiseLayer(l_in, sigma=0.6)
+recout = lasagne.layers.BidirectionalLSTMLayer(l_in, num_units=3, dropout_rate=0.1)
+recout = lasagne.layers.BidirectionalLSTMLayer(recout, num_units=4, dropout_rate=0.1)
+recout = lasagne.layers.BidirectionalLSTMLayer(recout, num_units=5)
+l_reshape = lasagne.layers.ReshapeLayer(recout,
+                                       (BATCH_SIZE*length, recout.get_output_shape()[-1]))
+nonlinearity = lasagne.nonlinearities.softmax
+l_rec_out = lasagne.layers.DenseLayer(l_reshape, num_units=y_val.shape[-1],
+                                      nonlinearity=nonlinearity)
+l_out = lasagne.layers.ReshapeLayer(l_rec_out,
+                                    (BATCH_SIZE, length, y_val.shape[-1]))
 
 # createnet in LSTMTrainingFunctions can setup networks with a number of
 # different architectures.
@@ -267,10 +237,10 @@ givens_preds = [(sym_input, sh_input), (sym_mask, sh_mask)]
 # takes no input because the inputs are specified with the givens argument.
 # We compile cost_train and specify that the parameters should be updated
 # using the adadelta update rules.
-train = theano.function([], cost_train, updates=updates, givens=givens,on_unused_input='warn')
-compute_cost_val = theano.function([], cost_val, givens=givens, on_unused_input='warn')
+train = theano.function([], cost_train, updates=updates, givens=givens)
+compute_cost_val = theano.function([], cost_val, givens=givens)
 compute_preds = theano.function([], l_out.get_output(input_dict, determinist=True, mask=sym_mask),
-                                  givens=givens_preds, on_unused_input='warn')
+                                  givens=givens_preds)
 
 ####################################################################
 #           TRAINING LOOP                                          #

@@ -48,11 +48,25 @@ def prederrrate(output, target_output, mask,db='Y_PRED_ERRORS:',verbose=False):
     error = 1.0-acc
     return error
 
+# class for clipping gradient. Not uses atm
+# apply around loss, T.grad(grad_clip(loss), all_params)
+class GradClip(theano.compile.ViewOp):
+
+    def __init__(self, clip_lower_bound, clip_upper_bound):
+        self.clip_lower_bound = clip_lower_bound
+        self.clip_upper_bound = clip_upper_bound
+        assert(self.clip_upper_bound >= self.clip_lower_bound)
+
+    def grad(self, args, g_outs):
+        return [T.clip(g_out, self.clip_lower_bound, self.clip_upper_bound) for g_out in g_outs]
+
+grad_clip = GradClip(-1.0, 1.0)
+T.opt.register_canonicalize(theano.gof.OpRemove(grad_clip), name='grad_clip')
 
 def momentum_normscaled(loss, all_params, lr, mom, batch_size, max_norm=np.inf, weight_decay=0.0,verbose=False):
     updates = []
     #all_grads = [theano.grad(loss, param) for param in all_params]
-    all_grads = theano.grad(loss,all_params)
+    all_grads = theano.grad(grad_clip(loss),all_params)
 
     grad_lst = [ T.sum( (  grad / float(batch_size) )**2  ) for grad in all_grads ]
     grad_norm = T.sqrt( T.sum( grad_lst ))
@@ -83,7 +97,7 @@ def momentum_normscaled(loss, all_params, lr, mom, batch_size, max_norm=np.inf, 
 
 def nesterov_normscaled(loss, all_params,  lr, mom, batch_size, max_norm=np.inf, weight_decay=0.0,verbose=False):
     #all_grads = [theano.grad(loss, param) for param in all_params]
-    all_grads = theano.grad(loss,all_params)
+    all_grads = theano.grad(grad_clip(loss), all_params)
     updates = []
 
     grad_lst = [ T.sum( (  grad / float(batch_size) )**2  ) for grad in all_grads ]
@@ -113,21 +127,6 @@ def nesterov_normscaled(loss, all_params,  lr, mom, batch_size, max_norm=np.inf,
         updates.append((param_i, w))
 
     return updates
-
-# class for clipping gradient. Not uses atm
-# apply around loss, T.grad(grad_clip(loss), all_params)
-class GradClip(theano.compile.ViewOp):
-
-    def __init__(self, clip_lower_bound, clip_upper_bound):
-        self.clip_lower_bound = clip_lower_bound
-        self.clip_upper_bound = clip_upper_bound
-        assert(self.clip_upper_bound >= self.clip_lower_bound)
-
-    def grad(self, args, g_outs):
-        return [T.clip(g_out, self.clip_lower_bound, self.clip_upper_bound) for g_out in g_outs]
-
-grad_clip = GradClip(-1.0, 1.0)
-T.opt.register_canonicalize(theano.gof.OpRemove(grad_clip), name='grad_clip')
 
 def adadelta_normscaled(loss, all_params,batch_size=1,max_norm=np.inf,
                         max_col_norm = 0.0,learning_rate=1.0, rho=0.95,
