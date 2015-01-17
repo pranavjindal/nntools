@@ -586,7 +586,8 @@ class BidirectionalLSTMLayer(Layer):
         self.hid_init_bck = self.create_param(hid_init, (num_batch, num_units))
 
         #names for debugging
-        self.W_cell_to_gates.name = "W_cell_to_gates"
+        if self.peepholes:
+            self.W_cell_to_gates.name = "W_cell_to_gates"
         self.b_gates.name = "b_gates"
         self.W_hid_to_gates.name = "W_hid_to_gates"
         self.W_in_to_gates.name = "W_in_to_gates"
