@@ -799,7 +799,7 @@ class BidirectionalLSTMLayer(Layer):
             # until the end of the sequence is found.
             not_mask_bck = 1 - mask_bck
             cell_bck = cell_bck*mask_bck + cell_previous_bck*not_mask_bck
-            hid_bck = hid_fwd*mask_bck + hid_previous_bck*not_mask_bck
+            hid_bck = hid_bck*mask_bck + hid_previous_bck*not_mask_bck
 
             return [cell_fwd, cell_bck, hid_bck, hid_fwd]
 
