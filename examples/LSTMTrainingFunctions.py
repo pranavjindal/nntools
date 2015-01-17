@@ -3,7 +3,7 @@ import theano
 import theano.tensor as T
 import numpy as np
 from theano.ifelse import ifelse
-import nntools
+import lasagne
 import cPickle
 
 def maskednll(output,target_output, mask,batch_size,verbose=False,db='COST:'):
@@ -295,6 +295,7 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
     :param rnn_skip_connection: adds skip connection that bypasses the RNN units
             if this is a non False value it must be an input layer with shape
             batchsize x seqlen x some_number_of_features
+    :param Weight init scale, float
     :return: network output layer, list of la_unit params (possbly empty list)
 
     '''
@@ -319,7 +320,8 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
         else:
             assert False, "Unknown layertype"
 
-        addlayer = lambda prevlayer,nhid,nonlin,backwards: nntools.layers.RECURRENTTEST(
+
+        addlayer = lambda prevlayer,nhid,nonlin,backwards: lasagne.layers.RECURRENTTEST(
             prevlayer, num_units=nhid, dropout_rate=dropout_rnn,
             backwards=backwards,learn_init=learn_init, non_lin_out=nonlin,
             peepholes = peepholes, type=type)
@@ -333,37 +335,37 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
             print "\t" * 2 + "Adding Recurrent layer with nhidden:", nhid
             if unittype_rnn == 'LAunit':
                 print "\t" * 3 + 'Recurrent NONLIN: LAunit', relucap
-                nonlin, a, b = nntools.nonlinearities.LAunit(nhid,relucap=relucap)
+                nonlin, a, b = lasagne.nonlinearities.LAunit(nhid,relucap=relucap)
                 l_launits.append(a)
                 l_launits.append(b)
             elif unittype_rnn == 'sigm':
                 print "\t" * 3 + 'Recurrent NONLIN: sigm'
-                nonlin = nntools.nonlinearities.sigmoid
+                nonlin = lasagne.nonlinearities.sigmoid
             elif unittype_rnn == 'tanh':
                 print "\t" * 3 + 'Recurrent NONLIN: tanh'
-                nonlin = nntools.nonlinearities.tanh
+                nonlin = lasagne.nonlinearities.tanh
             elif unittype_rnn == 'ReLU':
                 print "\t" * 3 + 'Recurrent NONLIN: ReLU', relucap, reluleakyness
                 if relucap > 0 and reluleakyness > 0:
                     print "Leaky capped"
-                    nonlin = nntools.nonlinearities.rectify_leaky_capped(relucap,reluleakyness)
+                    nonlin = lasagne.nonlinearities.rectify_leaky_capped(relucap,reluleakyness)
                 elif relucap > 0:
                     print "capped"
-                    nonlin = nntools.nonlinearities.rectify_capped(relucap)
+                    nonlin = lasagne.nonlinearities.rectify_capped(relucap)
                 elif reluleakyness > 0:
                     print "Leaky"
-                    nonlin = nntools.nonlinearities.rectify_leaky(reluleakyness)
+                    nonlin = lasagne.nonlinearities.rectify_leaky(reluleakyness)
                 else:
                     print "Normal ReLU"
-                    nonlin = nntools.nonlinearities.rectify
+                    nonlin = lasagne.nonlinearities.rectify
             else:
                 assert False, 'Unknown Recurrent unit type: ' + unittype_rnn
 
             fwd = addlayer(layer, nhid, nonlin, False)
             if isbrnn:
                bck = addlayer(layer, nhid, nonlin, True) # backwards true
-               layer = nntools.layers.ConcatLayer([fwd, bck],axis=2)
-               #layer = nntools.layers.ElemwiseSumLayer([fwd, bck])
+               layer = lasagne.layers.ConcatLayer([fwd, bck],axis=2)
+               #layer = lasagne.layers.ElemwiseSumLayer([fwd, bck])
             else:
                layer = fwd
 
@@ -375,24 +377,24 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
         layer = input
         for idx,nhid in enumerate(nhid_layers):
             print "     %i) addding ffn with %i ReLU units, dropout %f" %(idx,nhid,dropout)
-            layer = nntools.layers.DenseLayer(
-                layer, nhid, nonlinearity=nntools.nonlinearities.rectify)
+            layer = lasagne.layers.DenseLayer(
+                layer, nhid, nonlinearity=lasagne.nonlinearities.rectify)
             if dropout > 0:
-                 layer = nntools.layers.dropout(layer, p=input_layer_dropout)
+                 layer = v.layers.dropout(layer, p=input_layer_dropout)
         return layer
 
     #add input network
-    inputlayer = nntools.layers.InputLayer(shape=(batch_size, padded_seq_len, n_features))
+    inputlayer = lasagne.layers.InputLayer(shape=(batch_size, padded_seq_len, n_features))
     input_layer_1 = inputlayer
 
     if type(input_layers) == list:
         #reshape to feedforward format
-        inputlayer = nntools.layers.ReshapeLayer(
+        inputlayer = lasagne.layers.ReshapeLayer(
             inputlayer, (batch_size * padded_seq_len, n_features))
         inputlayer = addfeedforwardlayers(
             inputlayer, input_layers, input_layer_dropout, 'FFN INPUTLAYERS:')
 
-        inputlayer = nntools.layers.ReshapeLayer(
+        inputlayer = lasagne.layers.ReshapeLayer(
             inputlayer, shape=(batch_size, padded_seq_len, inputlayer.get_output_shape()[-1]))
 
     lstm_out = create_lstm(isbrnn, rnn_layer_layers, inputlayer)  # forward net
@@ -402,12 +404,12 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
         # assumes that the shape of the input layer is
         # batchsize x seqlen x some_number_of_features
         input2 = rnn_skip_connection
-        lstm_out = nntools.layers.ConcatLayer([lstm_out, input2],axis=2)
+        lstm_out = lasagne.layers.ConcatLayer([lstm_out, input2],axis=2)
 
 
 
     lstm_out_hid  = lstm_out.get_output_shape()[2]
-    lstm_out = nntools.layers.ReshapeLayer(lstm_out, (batch_size * padded_seq_len, lstm_out_hid))
+    lstm_out = lasagne.layers.ReshapeLayer(lstm_out, (batch_size * padded_seq_len, lstm_out_hid))
 
     if type(output_layers) == list:
         lstm_out = addfeedforwardlayers(
@@ -416,15 +418,15 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
     print "----> ADDING OUTPUT LAYER"
     if final_output_layer == 'linear':
         print "     USING LINEAR UNITS IN OUTPUT LAYER"
-        nonlin_output = nntools.nonlinearities.linear
+        nonlin_output = lasagne.nonlinearities.linear
     elif final_output_layer == 'softmax':
         print "     USING SOFTMAX UNITS IN OUTPUT LAYER"
-        nonlin_output = nntools.nonlinearities.softmax
+        nonlin_output = lasagne.nonlinearities.softmax
     else:
         assert False, 'Output must be linear or softmax'
 
-    l_output = nntools.layers.DenseLayer(lstm_out, num_units=n_classes, nonlinearity=nonlin_output)
-    net = nntools.layers.ReshapeLayer(l_output, (batch_size, padded_seq_len, n_classes))
+    l_output = lasagne.layers.DenseLayer(lstm_out, num_units=n_classes, nonlinearity=nonlin_output)
+    net = lasagne.layers.ReshapeLayer(l_output, (batch_size, padded_seq_len, n_classes))
     return net, l_launits, input_layer_1
 
 
