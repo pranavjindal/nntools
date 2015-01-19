@@ -61,10 +61,10 @@ class GradClip(theano.compile.ViewOp):
 
     def grad(self, args, g_outs):
         def pgrad(g_out):
-            g_out = T.clip(g_out, self.clip_lower_bound, self.clip_upper_bound)
-            g_out = ifelse(T.any(T.isnan(g_out)),
-            T.ones_like(g_out)*0.00001,
-            g_out)
+            #g_out = T.clip(g_out, self.clip_lower_bound, self.clip_upper_bound)
+            #g_out = ifelse(T.any(T.isnan(g_out)),
+            #T.ones_like(g_out)*0.00001,
+            #g_out)
             return g_out
         return [pgrad(g_out) for g_out in g_outs]
 
@@ -420,8 +420,10 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
     elif final_output_layer == 'softmax':
         print "     USING SOFTMAX UNITS IN OUTPUT LAYER"
         nonlin_output = lasagne.nonlinearities.softmax
+    elif final_output_layer == 'EMPTY':
+        return lstm_out, l_launits, input_layer_1
     else:
-        assert False, 'Output must be linear or softmax'
+        assert False, 'Output must be linear or softmax or empty'
 
     l_output = lasagne.layers.DenseLayer(lstm_out, num_units=n_classes, nonlinearity=nonlin_output)
     net = lasagne.layers.ReshapeLayer(l_output, (batch_size, padded_seq_len, n_classes))
