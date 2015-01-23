@@ -313,16 +313,13 @@ def createmodel(rnn_layer_layers, isbrnn, batch_size,n_features,n_classes,layer_
         if layer_type_rnn in ['LSTM']:
             assert False, "Not implemented"
         elif layer_type_rnn == 'LSTMFAST':
-            type = 'LSTM'
             peepholes = True
         elif layer_type_rnn == 'LSTMnopeeps':
             assert False, "Not implemented"
         elif layer_type_rnn =='LSTMnopeepsFAST':
             peepholes = False
-            type = 'LSTM'
         elif layer_type_rnn == 'RNN':
-            type = 'RNN'
-            peepholes = False
+            assert False, "Not implemented"
         else:
             assert False, "Unknown layertype"
 
