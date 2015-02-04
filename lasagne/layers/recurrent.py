@@ -437,15 +437,17 @@ class LSTMLayer(Layer):
 
             if self.peepholes:
                 ingate += cell_previous*slice_c(self.W_cell_to_gates, 0)
-                forgetgate = cell_previous*slice_c(self.W_cell_to_gates, 1)
-                outgate = cell_previous*slice_c(self.W_cell_to_gates, 2)
+                forgetgate += cell_previous*slice_c(self.W_cell_to_gates, 1)
 
             ingate = self.nonlinearity_ingate(ingate)
             forgetgate = self.nonlinearity_forgetgate(forgetgate)
             modulationgate = self.nonlinearity_modulationgate(modulationgate)
-            outgate = self.nonlinearity_outgate(outgate)
+            
 
             cell = forgetgate*cell_previous + ingate*modulationgate
+            if self.peepholes:
+                outgate += cell*slice_c(self.W_cell_to_gates, 2)
+            outgate = self.nonlinearity_outgate(outgate)
             hid = outgate*self.nonlinearity_out(cell)
             return [cell, hid]
 
@@ -759,29 +761,30 @@ class BidirectionalLSTMLayer(Layer):
         # h_t = o_t \tanh(c_t)
         #
         # Gate names are taken from http://arxiv.org/abs/1409.2329 figure 1
-        def dostep(input_dot_W_n, cell_previous, hid_previous, idx):
+        def dostep(input_dot_W_n, cell_previous, hid_previous, W_hid_to_gates,
+                   W_cell_to_gates):
 
             # calculate gates pre-activations and slice
-            gates = input_dot_W_n + T.dot(hid_previous, self.W_hid_to_gates[idx])
+            gates = input_dot_W_n + T.dot(hid_previous, W_hid_to_gates)
             ingate = slice_w(gates,0)
             forgetgate = slice_w(gates,1)
             modulationgate = slice_w(gates,2)
             outgate = slice_w(gates,3)
 
             if self.peepholes:
-                ingate += cell_previous*slice_c(self.W_cell_to_gates[idx], 0)
-                forgetgate = cell_previous*slice_c(self.W_cell_to_gates[idx], 1)
-                outgate = cell_previous*slice_c(self.W_cell_to_gates[idx], 2)
+                ingate += cell_previous*slice_c(W_cell_to_gates, 0)
+                forgetgate += cell_previous*slice_c(W_cell_to_gates, 1)
 
             ingate = self.nonlinearity_ingate(ingate)
             forgetgate = self.nonlinearity_forgetgate(forgetgate)
             modulationgate = self.nonlinearity_modulationgate(modulationgate)
-            outgate = self.nonlinearity_outgate(outgate)
 
             cell = forgetgate*cell_previous + ingate*modulationgate
+            if self.peepholes:
+                outgate += cell*slice_c(W_cell_to_gates, 2)
             hid = outgate*self.nonlinearity_out(cell)
+            outgate = self.nonlinearity_outgate(outgate)
             return cell, hid
-
 
         def step(input_dot_W_fwd, input_dot_W_bck, mask_bck,
                 cell_previous_fwd, hid_previous_fwd,
