@@ -782,8 +782,8 @@ class BidirectionalLSTMLayer(Layer):
             cell = forgetgate*cell_previous + ingate*modulationgate
             if self.peepholes:
                 outgate += cell*slice_c(W_cell_to_gates, 2)
-            hid = outgate*self.nonlinearity_out(cell)
             outgate = self.nonlinearity_outgate(outgate)
+            hid = outgate*self.nonlinearity_out(cell)
             return cell, hid
 
         def step(input_dot_W_fwd, input_dot_W_bck, mask_bck,
