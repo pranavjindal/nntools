@@ -485,21 +485,21 @@ class BidirectionalLSTMLayer(Layer):
     def __init__(self, input_layer, num_units,
                  W_in_to_gates=ini,
                  W_hid_to_gates=ini,
-                 W_cell_to_gates=ini,
+                 W_cell_to_gates=zero,
                  b_gates=zero,
                  nonlinearity_ingate=nonlinearities.sigmoid,
                  nonlinearity_forgetgate=nonlinearities.sigmoid,
                  nonlinearity_modulationgate=nonlinearities.tanh,
                  nonlinearity_outgate=nonlinearities.sigmoid,
                  nonlinearity_out=nonlinearities.tanh,
-                 cell_init_fwd=init.Constant(0.),
-                 hid_init_fwd=init.Constant(0.),
-                 cell_init_bck=init.Constant(0.),
-                 hid_init_bck=init.Constant(0.),
+                 cell_init_fwd=zero,
+                 hid_init_fwd=zero,
+                 cell_init_bck=zero,
+                 hid_init_bck=zero,
                  learn_init=True,
-                 peepholes=True,
-                 dropout_rate=0.0,
-                 dropout_rescale=True):
+                 peepholes=False,
+                 highforgetbias=False,
+                 returncell=False):
         '''
         Initialize an LSTM layer.  For details on what the parameters mean, see
         (7-11) from [#graves2014generating]_.
@@ -527,8 +527,7 @@ class BidirectionalLSTMLayer(Layer):
                 If True, the LSTM uses peephole connections.
                 When False, W_cell_to_ingate, W_cell_to_forgetgate and
                 W_cell_to_outgate are ignored.
-            - dropout_rate: dropout probability on non recurrent conncections
-            - dropout_rescale: rescale dropout connections or not
+            - highforgetbias: if true init forget gate bias to high value
         '''
 
 
@@ -564,21 +563,57 @@ class BidirectionalLSTMLayer(Layer):
         self.learn_init = learn_init
         self.num_units = num_units
         self.peepholes = peepholes
-        self.dropout_rate = dropout_rate
-        self.dropout_rescale = dropout_rescale
+        self.returncell = returncell
 
         # Input dimensionality is the output dimensionality of the input layer
         (num_batch, _, num_inputs) = self.input_layer.get_output_shape()
 
+        def set_c(x, direc, n, val):
+            sh_val = x.get_value()
+            sh_val[direc, n*self.num_units:(n+1)*self.num_units] = val()
+            x.set_value(sh_val)
+
+        def set_w(x, direc, n, val):
+            sh_val = x.get_value()
+            sh_val[direc, :, n*self.num_units:(n+1)*self.num_units] = val()
+            x.set_value(sh_val)
+        self.W_cell_to_gates = [[], []]
         if self.peepholes:
             self.W_cell_to_gates = self.create_param(
                 W_cell_to_gates, (2, 3*num_units))
+            val = lambda : W_cell_to_gates(num_units)
+            for i in range(3):
+                set_c(self.W_cell_to_gates, 0, i, val)
+                set_c(self.W_cell_to_gates, 1, i, val)
+
         self.b_gates = self.create_param(
             b_gates, (2, 4*num_units))
+        # see http://yyue.blogspot.dk/2015/01/a-brief-overview-of-deep-learning.html
+        ini_fget = init.Uniform((20, 25))
+        for i in range(4):
+            if i == 1 and highforgetbias: # forgetgate
+                val = lambda : ini_fget(num_units)
+            else:
+                val = lambda : b_gates(num_units)
+            set_c(self.b_gates, 0, i, val)
+            set_c(self.b_gates, 1, i, val)
+
+
+
         self.W_hid_to_gates = self.create_param(
             W_hid_to_gates, (2, num_units, 4*num_units))
+        val = lambda : W_hid_to_gates((num_units, num_units))
+        for i in range(4):
+            set_w(self.W_hid_to_gates, 0, i, val)
+            set_w(self.W_hid_to_gates, 1, i, val)
+
+
         self.W_in_to_gates = self.create_param(
             W_in_to_gates, (2, num_inputs, 4*num_units))
+        val = lambda : W_in_to_gates((num_inputs, num_units))
+        for i in range(4):
+            set_w(self.W_in_to_gates, 0, i, val)
+            set_w(self.W_in_to_gates, 1, i, val)
 
         # Setup initial values for the cell and the lstm hidden units
         self.cell_init_fwd = self.create_param(
@@ -589,15 +624,15 @@ class BidirectionalLSTMLayer(Layer):
         self.hid_init_bck = self.create_param(hid_init_bck, (num_batch, num_units))
         #names for debugging
         if self.peepholes:
-            self.W_cell_to_gates.name = "W_cell_to_gates"
-        self.b_gates.name = "b_gates"
-        self.W_hid_to_gates.name = "W_hid_to_gates"
-        self.W_in_to_gates.name = "W_in_to_gates"
+            self.W_cell_to_gates.name = "BidirectionalLSTMLayer: W_cell_to_gates"
+        self.b_gates.name = "BidirectionalLSTMLayer: b_gates"
+        self.W_hid_to_gates.name = "BidirectionalLSTMLayer: W_hid_to_gates"
+        self.W_in_to_gates.name = "BidirectionalLSTMLayer: W_in_to_gates"
 
-        self.cell_init_fwd.name = "cell_init_fwd"
-        self.hid_init_fwd.name = "hid_init_fwd"
-        self.cell_init_bck.name = "cell_init_bck"
-        self.hid_init_bck.name = "hid_init_bck"
+        self.cell_init_fwd.name = "BidirectionalLSTMLayer: cell_init_fwd"
+        self.hid_init_fwd.name = "BidirectionalLSTMLayer: hid_init_fwd"
+        self.cell_init_bck.name = "BidirectionalLSTMLayer: cell_init_bck"
+        self.hid_init_bck.name = "BidirectionalLSTMLayer: hid_init_bck"
 
     def get_params(self):
         '''
@@ -668,7 +703,7 @@ class BidirectionalLSTMLayer(Layer):
         '''
         return (input_shape[0], input_shape[1], 2*self.num_units)
 
-    def get_output_for(self, input_fwd, mask=None, deterministic=False,
+    def get_output_for(self, input_fwd, mask=None, blstm_hooks=None,
                        *args, **kwargs):
         '''
         Compute this layer's output function given a symbolic input variable
@@ -686,44 +721,27 @@ class BidirectionalLSTMLayer(Layer):
             - layer_output : theano.TensorType
                 Symbolic output variable
         '''
-
-        assert mask is not None, "Mask must be given for bidirectional layer"
+        mask_fwd = mask
+        assert mask_fwd is not None, "Mask must be given for bidirectional layer"
 
         # Treat all layers after the first as flattened feature dimensions
         if input_fwd.ndim > 3:
             input_fwd = input.reshape((input_fwd.shape[0], input_fwd.shape[1],
                                    T.prod(input_fwd.shape[2:])))
 
-        # dropout function
-        def D(x):
-            batch_size, seq_length, _ = self.input_layer.get_output_shape()
-            shape = (seq_length, batch_size, 4*self.num_units)
-            retain_prob = 1 - self.dropout_rate
-            if self.dropout_rescale:
-                x /= retain_prob
-            return x * utils.floatX(
-                _srng.binomial(shape, p=retain_prob, dtype='int32'))
-
+        input_fwd = input_fwd.dimshuffle(1, 0, 2)
+        input_bck = input_fwd[::-1, :, :]
         # precompute inputs*W and dimshuffle
         # Input is provided as (n_batch, n_time_steps, n_features)
         # W _in_to_gates is (n_features, 4*num_units). input dot W is then
         # (n_batch, n_time_steps, 4*num_units). Because scan iterate over the
         # first dimension we dimshuffle to (n_time_steps, n_batch, n_features)
         # flip input and mask if we ar going backwards
-        input_bck = input_fwd[:, ::-1, :]
-        mask_bck = mask[:, ::-1]
-        #set_subtensor(x, y, inplace=False, tolerate_inplace_aliasing=False)
-        if deterministic or self.dropout_rate == 0:
-            input_dot_W_fwd = T.dot(
-                input_fwd, self.W_in_to_gates[0]).dimshuffle(1, 0, 2)
-            input_dot_W_bck = T.dot(
-                input_bck, self.W_in_to_gates[1]).dimshuffle(1, 0, 2)
-        else:
-            input_dot_W_fwd = D(
-                T.dot(input_fwd, self.W_in_to_gates[0]).dimshuffle(1, 0, 2))
-            input_dot_W_bck = D(
-                T.dot(input_bck, self.W_in_to_gates[1]).dimshuffle(1, 0, 2))
 
+        input_dot_W_fwd = T.dot(
+            input_fwd, self.W_in_to_gates[0])
+        input_dot_W_bck = T.dot(
+            input_bck, self.W_in_to_gates[1])
         input_dot_W_fwd += self.b_gates[0]
         input_dot_W_bck += self.b_gates[1]
 
@@ -733,13 +751,14 @@ class BidirectionalLSTMLayer(Layer):
         # first dim. If mask is 2d we dimshuffle to (seq_len, batch_size) and
         # add a broadcastable dimension. If 3d assume that third dim is
         # broadcastable.
-        if mask_bck.ndim == 2:
-            mask_bck = mask_bck.dimshuffle(1, 0, 'x')
+
+        if mask_fwd.ndim == 2:
+            mask_fwd = mask_fwd.dimshuffle(1, 0, 'x')
         else:
-            assert mask_bck.broadcastable == (False, False, True), \
+            assert mask_fwd.broadcastable == (False, False, True), \
                 "When mask is 3d the last dimension must be boadcastable"
-            mask_bck = mask_bck.dimshuffle(1, 0, 2)
-            mask_bck.name = 'mask_bck'
+            mask_fwd = mask_fwd.dimshuffle(1, 0, 2)
+        mask_bck = mask_fwd[::-1, :]   # reverse
 
 
         # input_dow_w is (n_batch, n_time_steps, 4*num_units). We define a
@@ -761,8 +780,8 @@ class BidirectionalLSTMLayer(Layer):
         # h_t = o_t \tanh(c_t)
         #
         # Gate names are taken from http://arxiv.org/abs/1409.2329 figure 1
-        def dostep(input_dot_W_n, cell_previous, hid_previous, W_hid_to_gates,
-                   W_cell_to_gates):
+        def dostep(input_dot_W_n, cell_previous, hid_previous,
+                    W_hid_to_gates, W_cell_to_gates):
 
             # calculate gates pre-activations and slice
             gates = input_dot_W_n + T.dot(hid_previous, W_hid_to_gates)
@@ -773,7 +792,7 @@ class BidirectionalLSTMLayer(Layer):
 
             if self.peepholes:
                 ingate += cell_previous*slice_c(W_cell_to_gates, 0)
-                forgetgate += cell_previous*slice_c(W_cell_to_gates, 1)
+                forgetgate += cell_previous*slice_c(W_cell_to_gates,1)
 
             ingate = self.nonlinearity_ingate(ingate)
             forgetgate = self.nonlinearity_forgetgate(forgetgate)
@@ -783,49 +802,71 @@ class BidirectionalLSTMLayer(Layer):
             if self.peepholes:
                 outgate += cell*slice_c(W_cell_to_gates, 2)
             outgate = self.nonlinearity_outgate(outgate)
+
             hid = outgate*self.nonlinearity_out(cell)
             return cell, hid
 
-        def step(input_dot_W_fwd, input_dot_W_bck, mask_bck,
+
+        def step(input_dot_W_fwd, input_dot_W_bck, mask_fwd_n, mask_bck_n,
                 cell_previous_fwd, hid_previous_fwd,
-                cell_previous_bck, hid_previous_bck):
+                cell_previous_bck, hid_previous_bck,
+                W_hid_to_gates, W_cell_to_gates):
 
             #forward
             cell_fwd, hid_fwd = dostep(
-                input_dot_W_fwd, cell_previous_fwd, hid_previous_fwd, self.W_hid_to_gates[0], self.W_cell_to_gates[0])
+                input_dot_W_fwd, cell_previous_fwd, hid_previous_fwd,
+                       W_hid_to_gates[0], W_cell_to_gates[0])
             # backward
             cell_bck, hid_bck = dostep(
-                input_dot_W_bck, cell_previous_bck, hid_previous_bck, self.W_hid_to_gates[1], self.W_cell_to_gates[1])
+                input_dot_W_bck, cell_previous_bck, hid_previous_bck,
+                W_hid_to_gates[1], W_cell_to_gates[1])
 
             # If mask is 0, use previous state until mask = 1 is found.
             # This propagates the layer initial state when moving backwards
             # until the end of the sequence is found.
-            not_mask_bck = 1 - mask_bck
-            cell_bck = cell_bck*mask_bck + cell_previous_bck*not_mask_bck
-            hid_bck = hid_bck*mask_bck + hid_previous_bck*not_mask_bck
+            not_mask_bck_n = 1 - mask_bck_n
+            not_mask_fwd_n = 1 - mask_fwd_n
+            cell_bck = cell_bck*mask_bck_n + cell_previous_bck*not_mask_bck_n
+            cell_fwd = cell_fwd*mask_fwd_n + cell_previous_fwd*not_mask_fwd_n
+            hid_bck = hid_bck*mask_bck_n + hid_previous_bck*not_mask_bck_n
+            hid_fwd = hid_fwd*mask_fwd_n + hid_previous_fwd*not_mask_fwd_n
 
             return [cell_fwd, cell_bck, hid_bck, hid_fwd]
 
-        sequences = [input_dot_W_fwd, input_dot_W_bck, mask_bck]
+        sequences = [input_dot_W_fwd, input_dot_W_bck,mask_fwd, mask_bck]
         init = [self.cell_init_fwd, self.cell_init_bck,
                 self.hid_init_fwd, self.hid_init_bck]
 
         # Scan op iterates over first dimension of input and repeatedly
         # applied the step function
-        scan_out = theano.scan(step, sequences=sequences, outputs_info=init)
+        nonseqs = [self.W_hid_to_gates, self.W_cell_to_gates]
+        scan_out = theano.scan(step, sequences=sequences, outputs_info=init,
+                               non_sequences=nonseqs)
 
         # output is  (n_time_steps, n_batch, n_units))
-        output_fwd = scan_out[0][2]
-        output_bck = scan_out[0][3]
+        output_hid_fwd = scan_out[0][2]
+        output_hid_bck = scan_out[0][3]
 
         # reverse bck output
-        output_bck = output_bck[::-1, :, :]
+        output_hid_bck = output_hid_bck[::-1, :, :]
 
         # concateante fwd and bck
-        output = T.concatenate([output_fwd, output_bck], axis=2)
-
+        output_hid = utils.concatenate([output_hid_fwd, output_hid_bck], axis=2)
+        self.output_hid = output_hid
+        self.output_hid.name = "BidireactionaLSTMLayer: output_hid"
 
         # Now, dimshuffle back to (n_batch, n_time_steps, n_units))
-        output = output.dimshuffle(1, 0, 2)
+        output_hid = output_hid.dimshuffle(1, 0, 2)
 
-        return output
+        if self.returncell:
+            output_cell_fwd = scan_out[0][0]
+            output_cell_bck = scan_out[0][1]
+            output_cell_bck = output_cell_bck[::-1, :, :]
+            output_cell = utils.concatenate(
+                [output_cell_fwd, output_cell_bck], axis=2)
+            output_cell = output_cell.dimshuffle(1, 0, 2)
+            self.output_cell = output_cell
+            self.output_cell.name = "BidireactionaLSTMLayer: output_cell"
+            return output_cell, output_hid
+        else:
+            return output_hid
