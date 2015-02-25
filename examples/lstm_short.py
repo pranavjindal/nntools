@@ -154,9 +154,9 @@ if manual:
     l_in = lasagne.layers.InputLayer(shape=(BATCH_SIZE, MAX_SEQ_LENGTH, N_FEATURES))
     #l_in = lasagne.layers.GaussianNoiseLayer(l_in, sigma=0.6)
     recout = lasagne.layers.BidirectionalLSTMLayer(
-        l_in, num_units=102, dropout_rate=0.1, peepholes=peepholes, learn_init=True)
+        l_in, num_units=102, peepholes=peepholes, learn_init=True)
     recout = lasagne.layers.BidirectionalLSTMLayer(
-        recout, num_units=156, dropout_rate=0.1, peepholes=peepholes, learn_init=True)
+        recout, num_units=156, peepholes=peepholes, learn_init=True)
     l_reshape = lasagne.layers.ReshapeLayer(
         recout,  (BATCH_SIZE*MAX_SEQ_LENGTH, recout.get_output_shape()[-1]))
     l_rec_out = lasagne.layers.DenseLayer(
