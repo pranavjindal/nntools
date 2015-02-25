@@ -792,10 +792,10 @@ class BidirectionalLSTMLayer(Layer):
 
             #forward
             cell_fwd, hid_fwd = dostep(
-                input_dot_W_fwd, cell_previous_fwd, hid_previous_fwd, 0)
+                input_dot_W_fwd, cell_previous_fwd, hid_previous_fwd, self.W_hid_to_gates[0], self.W_cell_to_gates[0])
             # backward
             cell_bck, hid_bck = dostep(
-                input_dot_W_bck, cell_previous_bck, hid_previous_bck, 1)
+                input_dot_W_bck, cell_previous_bck, hid_previous_bck, self.W_hid_to_gates[1], self.W_cell_to_gates[1])
 
             # If mask is 0, use previous state until mask = 1 is found.
             # This propagates the layer initial state when moving backwards
