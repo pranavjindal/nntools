@@ -831,7 +831,7 @@ class BidirectionalLSTMLayer(Layer):
             hid_bck = hid_bck*mask_bck_n + hid_previous_bck*not_mask_bck_n
             hid_fwd = hid_fwd*mask_fwd_n + hid_previous_fwd*not_mask_fwd_n
 
-            return [cell_fwd, cell_bck, hid_bck, hid_fwd]
+            return [cell_fwd, cell_bck, hid_fwd, hid_bck] 
 
         sequences = [input_dot_W_fwd, input_dot_W_bck,mask_fwd, mask_bck]
         init = [self.cell_init_fwd, self.cell_init_bck,
