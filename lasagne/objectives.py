@@ -1,6 +1,7 @@
 import theano
 import theano.tensor as T
 from theano.tensor.nnet import binary_crossentropy, categorical_crossentropy
+from lasagne.layers import get_output
 
 
 def mse(x, t):
@@ -50,8 +51,7 @@ class Objective(object):
                              'or None, not {0}'.format(aggregation))
         self.aggregation = aggregation
 
-    def get_loss(self, input=None, target=None, aggregation=None,
-                 *args, **kwargs):
+    def get_loss(self, input=None, target=None, aggregation=None, **kwargs):
         """
         Get loss scalar expression
 
@@ -63,15 +63,13 @@ class Objective(object):
                 given the input
             - aggregation : None to use the value passed to the
                 constructor or a value to override it
-            - args : additional arguments passed to `input_layer`'s
-                `get_output` method
             - kwargs : additional keyword arguments passed to `input_layer`'s
                 `get_output` method
 
         :returns:
             - output : loss expressions
         """
-        network_output = self.input_layer.get_output(input, *args, **kwargs)
+        network_output = get_output(self.input_layer, input, **kwargs)
         if target is None:
             target = self.target_var
         if aggregation not in self._valid_aggregation:
@@ -130,7 +128,7 @@ class MaskedObjective(object):
         self.aggregation = aggregation
 
     def get_loss(self, input=None, target=None, mask=None,
-                 aggregation=None, *args, **kwargs):
+                 aggregation=None, **kwargs):
         """
         Get loss scalar expression
 
@@ -146,15 +144,13 @@ class MaskedObjective(object):
                 contributions of the resulting loss values
             - aggregation : None to use the value passed to the
                 constructor or a value to override it
-            - args : additional arguments passed to `input_layer`'s
-                `get_output` method
             - kwargs : additional keyword arguments passed to `input_layer`'s
                 `get_output` method
 
         :returns:
             - output : loss expressions
         """
-        network_output = self.input_layer.get_output(input, *args, **kwargs)
+        network_output = get_output(self.input_layer, input, **kwargs)
         if target is None:
             target = self.target_var
         if mask is None:

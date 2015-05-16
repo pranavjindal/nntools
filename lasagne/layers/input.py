@@ -17,25 +17,33 @@ class InputLayer(Layer):
     variable can be specified when the layer is instantiated, else it is
     created.
 
-    :parameters:
-        - shape : tuple of `int` or `None` elements
-            The shape of the input. Any element can be `None` to indicate
-            that the size of that dimension is not fixed at compile time.
+    Parameters
+    ----------
+    shape : tuple of `int` or `None` elements
+        The shape of the input. Any element can be `None` to indicate that the
+        size of that dimension is not fixed at compile time.
 
-        - input_var : Theano symbolic variable or `None` (default: `None`)
-            A variable representing a network input. If it is not provided,
-            a variable will be created.
+    input_var : Theano symbolic variable or `None` (default: `None`)
+        A variable representing a network input. If it is not provided, a
+        variable will be created.
 
-    :usage:
-        >>> from lasagne.layers import InputLayer
-        >>> l_in = InputLayer((100, 20))
+    Raises
+    ------
+    ValueError
+        If the dimension of `input_var` is not equal to `len(shape)`
 
-    :note:
-        The first dimension usually indicates the batch size. If you specify
-        it, Theano may apply more optimizations while compiling the training
-        or prediction function, but the compiled function will not accept
-        data of a different batch size at runtime. To compile for a variable
-        batch size, set the first shape element to `None` instead.
+    Notes
+    -----
+    The first dimension usually indicates the batch size. If you specify it,
+    Theano may apply more optimizations while compiling the training or
+    prediction function, but the compiled function will not accept data of a
+    different batch size at runtime. To compile for a variable batch size, set
+    the first shape element to `None` instead.
+
+    Examples
+    --------
+    >>> from lasagne.layers import InputLayer
+    >>> l_in = InputLayer((100, 20))
     """
     def __init__(self, shape, input_var=None, name=None, **kwargs):
         self.shape = shape
@@ -53,12 +61,6 @@ class InputLayer(Layer):
         self.input_var = input_var
         self.name = name
 
-    def get_output_shape(self):
+    @Layer.output_shape.getter
+    def output_shape(self):
         return self.shape
-
-    def get_output(self, input=None, *args, **kwargs):
-        if isinstance(input, dict):
-            input = input.get(self, None)
-        if input is None:
-            input = self.input_var
-        return utils.as_theano_expression(input)

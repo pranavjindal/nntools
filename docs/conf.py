@@ -31,10 +31,15 @@ import sphinx_bootstrap_theme
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.autosummary',
     'sphinx.ext.doctest',
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
+    'numpydoc'
 ]
+
+# see http://stackoverflow.com/q/12206334/562769
+numpydoc_show_class_members = False
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -261,3 +266,26 @@ texinfo_documents = [
 
 # If true, do not generate a @detailmenu in the "Top" node's menu.
 # texinfo_no_detailmenu = False
+
+
+# fool rtd into thinking a GPU is available, so all modules are importable
+try:
+    from unittest.mock import Mock
+except ImportError:
+    from mock import Mock
+
+import theano
+import theano.sandbox.cuda
+
+theano.config = Mock(device='gpu')
+theano.sandbox.cuda.dnn = Mock(dnn_available=lambda: True)
+
+import sys
+
+sys.modules['pylearn2'] = Mock()
+sys.modules['pylearn2.sandbox'] = Mock()
+sys.modules['pylearn2.sandbox.cuda_convnet'] = Mock()
+sys.modules['pylearn2.sandbox.cuda_convnet.filter_acts'] = \
+    Mock(FilterActs=None)
+
+sys.modules['theano.sandbox.cuda.blas'] = Mock(GpuCorrMM=None)
