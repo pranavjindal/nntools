@@ -1,7 +1,7 @@
 """
 Layers to construct recurrent networks. Recurrent layers can be used similarly
 to feed-forward layers except that the input shape is expected to be
-`(batch_size, sequence_length, num_inputs)`. The input is allowed to have more
+`(batch_size, sequence_length, num_inputs). The input is allowed to have more
 than three dimensions in which case dimensions trailing the third dimension are
 flattened.
 
@@ -104,11 +104,11 @@ class CustomRecurrentLayer(Layer):
 
         # Get the batch size and number of units based on the expected output
         # of the input-to-hidden layer
-        (n_batch, _, self.num_inputs) = self.input_shape
+        (self.n_batch, _, self.num_inputs) = self.input_shape
         self.num_units = i2h_out[-1]
 
         # Initialize hidden state
-        self.hid_init = self.add_param(hid_init, (n_batch, self.num_units),
+        self.hid_init = self.add_param(hid_init, (1, self.num_units),
                                        trainable=learn_init, name="hid_init")
 
     def get_params(self, **tags):
@@ -187,11 +187,14 @@ class CustomRecurrentLayer(Layer):
             sequences = input
             step_fun = step
 
+        # repeat hid_init to batch size
+        hid_init = T.dot(T.ones((self.n_batch, 1)), self.hid_init)
+
         hid_out = theano.scan(
             step_fun,
             sequences=sequences,
             go_backwards=self.backwards,
-            outputs_info=[self.hid_init],
+            outputs_info=[hid_init],
             truncate_gradient=self.gradient_steps)[0]
 
         if self.return_sequence:
@@ -440,7 +443,7 @@ class LSTMLayer(Layer):
         self.return_cell = return_cell
         self.grad_clipping = grad_clipping
 
-        (num_batch, _, num_inputs) = self.input_shape
+        (self.num_batch, _, num_inputs) = self.input_shape
 
         # Initialize parameters using the supplied args
         self.W_in_to_ingate = self.add_param(
@@ -514,10 +517,10 @@ class LSTMLayer(Layer):
 
         # Setup initial values for the cell and the hidden units
         self.cell_init = self.add_param(
-            cell_init, (num_batch, num_units), name="cell_init",
+            cell_init, (1, num_units), name="cell_init",
             trainable=learn_init, regularizable=False)
         self.hid_init = self.add_param(
-            hid_init, (num_batch, num_units), name="hid_init",
+            hid_init, (1, num_units), name="hid_init",
             trainable=learn_init, regularizable=False)
 
     def get_output_shape_for(self, input_shape):
@@ -631,12 +634,17 @@ class LSTMLayer(Layer):
             sequences = input_dot_w
             step_fun = step
 
+        # repeat cell and hid init to batch size
+        ones = T.ones((self.num_batch, 1))
+        hid_init = T.dot(ones, self.hid_init)
+        cell_init = T.dot(ones, self.cell_init)
+
         # Scan op iterates over first dimension of input and repeatedly
         # applies the step function
         cell_out, hid_out = theano.scan(
             step_fun,
             sequences=sequences,
-            outputs_info=[self.cell_init, self.hid_init],
+            outputs_info=[cell_init, hid_init],
             go_backwards=self.backwards,
             truncate_gradient=self.gradient_steps)[0]
 
