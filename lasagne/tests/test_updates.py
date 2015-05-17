@@ -62,3 +62,27 @@ def test_norm_constraint_dim6_raises():
     with pytest.raises(ValueError) as excinfo:
         norm_constraint(param, max_norm)
     assert "Unsupported tensor dimensionality" in str(excinfo.value)
+
+
+def test_step_scaling():
+    import numpy as np
+    import theano
+    import theano.tensor as T
+    from lasagne.updates import step_scaling
+
+    x1 = T.scalar()
+    x2 = T.matrix()
+    threshold = 5.0
+    tensors, norm, multiplier = step_scaling([x1, x2], threshold)
+    f = theano.function([x1, x2], [tensors[0], tensors[1], norm, multiplier])
+
+    x_test = np.arange(1+9, dtype='float32')
+    x1_test = x_test[-1]
+    x2_test = x_test[:9].reshape((3, 3))
+    x1_out, x2_out, norm, multiplier = f(x1_test, x2_test)
+    x_out = [float(x1_out)] + list(x2_out.flatten())
+
+    np.testing.assert_array_almost_equal(np.linalg.norm(x_test), norm)
+    np.testing.assert_array_almost_equal(
+        np.linalg.norm(x_test*multiplier), threshold)
+    np.testing.assert_array_almost_equal(np.linalg.norm(x_out), threshold)

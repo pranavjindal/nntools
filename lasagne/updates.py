@@ -20,6 +20,14 @@ Two functions can be used to further modify the updates to include momentum:
 * :func:`apply_momentum()`
 * :func:`apply_nesterov_momentum()`
 
+Additionally, we provide a helper function to scale the norm of a list of
+tensor variables:
+
+* :func:`step_scaling()`
+
+This function can be used scale the gradient steps when training recurrent
+networks.
+
 Finally, we provide a helper function to constrain the norm of a
 tensor variable:
 
@@ -66,6 +74,7 @@ __all__ = [
     "rmsprop",
     "adadelta",
     "adam",
+    "step_scaling"
     "norm_constraint",
 ]
 
@@ -565,6 +574,55 @@ def adam(loss_or_grads, params, learning_rate=0.001, beta1=0.9,
 
     updates.append((t_prev, t))
     return updates
+
+
+def step_scaling(tensor_vars, threshold):
+    """Rescales a list of tensors based on their combined norm
+
+    If the combined norm of the input tensors exceeds the threshold then all
+    tensors are rescaled such that the combined norm is equal to the threshold.
+
+    Parameters
+    ----------
+    tensor_vars: TensorVariable or list of TensorVariables
+        Tensors to be rescaled.
+    threshold : float
+        Threshold value for total norm.
+
+    Returns
+    -------
+    List of:
+
+        * List of scaled tensors
+        * Total norm
+        * Scaling multiplier
+
+    Notes
+    -----
+    The total norm and the scaling multiplier can be used to monitor training.
+
+    """
+    def _l2_norm(tensors):
+        tensors_flat = []
+        for tensor in tensors:
+            tensor_flat = T.as_tensor_variable(tensor).flatten()
+            if tensor_flat.ndim == 0:
+                tensor_flat = tensor_flat.dimshuflle('x')
+            tensors_flat.append(tensor_flat)
+
+        joined = T.join(0, *tensors_flat)
+        return T.sqrt(T.sqr(joined).sum())
+
+    if not isinstance(tensor_vars, (list, tuple)):
+        tensor_vars = [tensor_vars]
+
+    threshold = theano.shared(utils.floatX(threshold))
+    norm = _l2_norm(tensor_vars)
+    scale = threshold / norm
+    multiplier = T.switch(norm < threshold, 1.0, scale)
+    tensor_vars_scaled = [step*multiplier for step in tensor_vars]
+
+    return tensor_vars_scaled, norm, multiplier
 
 
 def norm_constraint(tensor_var, max_norm, norm_axes=None, epsilon=1e-7):
