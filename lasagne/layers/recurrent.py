@@ -1,7 +1,9 @@
 """
 Layers to construct recurrent networks. Recurrent layers can be used similarly
 to feed-forward layers except that the input shape is expected to be
-(batch_size, sequence_length, num_inputs).
+`(batch_size, sequence_length, num_inputs)`. The input is allowed to have more
+than three dimensions in which case dimensions trailing the third dimension are
+flattened.
 
 The following recurrent layers are implemented:
 
@@ -35,17 +37,13 @@ class CustomRecurrentLayer(Layer):
     """
     A layer which implements a recurrent connection.
 
-    Expects inputs of shape
-        (n_batch, n_time_steps, n_features_1, n_features_2, ...)
-
-
     Parameters
     ----------
-    incoming : a :class:`Layer` instance or a tuple
+    incoming : a :class:`lasagne.layers.Layer` instance or a tuple
         The layer feeding into this layer, or the expected input shape
-    input_to_hidden : nntools.layers.Layer
+    input_to_hidden : :class:`lasagne.layers.Layer`
         Layer which connects input to the hidden state
-    hidden_to_hidden : nntools.layers.Layer
+    hidden_to_hidden : :class:`lasagne.layers.Layer`
         Layer which connects the previous hidden state to the new state
     nonlinearity : function or theano.tensor.elemwise.Elemwise
         Nonlinearity to apply when computing new state
@@ -59,13 +57,18 @@ class CustomRecurrentLayer(Layer):
         Number of timesteps to include in backpropagated gradient
         If -1, backpropagate through the entire sequence
     return_sequence : boolean
-        Specifies if the LSTM should output the hidden state for all positions
-        in the sequence or only for the last position. If true the output
-        shape is (num_batch, sequence_lengt, num_units) if false the output
-        shape is (num_batch, num_units).
+        Specifies if the recurrent layer should output the hidden state for all
+        positions in the sequence or only for the last position. If true the
+        output shape is (num_batch, sequence_lengt, num_units) if false the
+        output shape is (num_batch, num_units).
     grad_clipping: False or float
         If float the gradient messages are clipped during the backward pass.
-        See [2]_ (p. 6) for further explanation.
+        See [1]_ (p. 6) for further explanation.
+
+    References
+    ----------
+    .. [1] Alex Graves : Generating Sequences With Recurrent Neural
+           Networks
     """
     def __init__(self, incoming, input_to_hidden, hidden_to_hidden,
                  nonlinearity=nonlinearities.rectify,
@@ -209,13 +212,10 @@ class RecurrentLayer(CustomRecurrentLayer):
     A "vanilla" RNN layer, which has dense input-to-hidden and
     hidden-to-hidden connections.
 
-    Expects inputs of shape
-        (n_batch, n_time_steps, n_features_1, n_features_2, ...)
-
     Parameters
     ----------
-    input_layer : nntools.layers.Layer
-        Input to the recurrent layer
+    incoming : a :class:`lasagne.layers.Layer` instance or a tuple
+        The layer feeding into this layer, or the expected input shape
     num_units : int
         Number of hidden units in the layer
     W_in_to_hid : function or np.ndarray or theano.shared
@@ -236,13 +236,18 @@ class RecurrentLayer(CustomRecurrentLayer):
         Number of timesteps to include in backpropagated gradient
         If -1, backpropagate through the entire sequence
     return_sequence : boolean
-        Specifies if the LSTM should output the hidden state for all positions
-        in the sequence or only for the last position. If true the output
-        shape is (num_batch, sequence_lengt, num_units) if false the output
-        shape is (num_batch, num_units).
+        Specifies if the recurrent layer should output the hidden state for all
+        positions in the sequence or only for the last position. If true the
+        output shape is (num_batch, sequence_lengt, num_units) if false the
+        output shape is (num_batch, num_units).
     grad_clipping: False or float
         If float the gradient messages are clipped during the backward pass.
-        See [2]_ (p. 6) for further explanation.
+        See [1]_ (p. 6) for further explanation.
+
+    References
+    ----------
+    .. [1] Alex Graves : Generating Sequences With Recurrent Neural
+           Networks
     """
     def __init__(self, incoming, num_units,
                  W_in_to_hid=init.Uniform(),
@@ -284,7 +289,7 @@ class LSTMLayer(Layer):
 
     Parameters
     ----------
-    incoming : a :class:`Layer` instance or a tuple
+    incoming : a :class:`:class:`lasagne.layers.Layer`` instance or a tuple
         The layer feeding into this layer, or the expected input shape
     num_units : int
         Number of hidden units in the layer
@@ -355,14 +360,14 @@ class LSTMLayer(Layer):
         be useful if you are implementing an encoder/decoder structure.
     grad_clipping: False or float
         If float the gradient messages are clipped during the backward pass.
-        See [2]_ (p. 6) for further explanation.
+        See [1]_ (p. 6) for further explanation.
 
     References
     ----------
-        .. [1] Alex Graves : Generating Sequences With Recurrent Neural
-               Networks
-        .. [2] Wojciech Zaremba et al.,
-               Recurrent neural networkregularization"
+    .. [1] Alex Graves : Generating Sequences With Recurrent Neural
+           Networks
+    .. [2] Wojciech Zaremba et al.,
+           Recurrent neural networkregularization"
     """
     def __init__(self, incoming, num_units,
                  W_in_to_ingate=init.Normal(0.1),
