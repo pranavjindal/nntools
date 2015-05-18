@@ -358,9 +358,6 @@ class LSTMLayer(Layer):
         in the sequence or only for the last position. If true the output
         shape is (num_batch, sequence_lengt, num_units) if false the output
         shape is (num_batch, num_units).
-    return_cell : boolean
-        If true the cell and the hidden state is returned. This setting might
-        be useful if you are implementing an encoder/decoder structure.
     grad_clipping: False or float
         If float the gradient messages are clipped during the backward pass.
         See [1]_ (p. 6) for further explanation.
@@ -400,7 +397,6 @@ class LSTMLayer(Layer):
                  peepholes=True,
                  gradient_steps=-1,
                  return_sequence=True,
-                 return_cell=False,
                  grad_clipping=False):
 
         # todo: add subnetwork option.
@@ -440,7 +436,6 @@ class LSTMLayer(Layer):
         self.peepholes = peepholes
         self.gradient_steps = gradient_steps
         self.return_sequence = return_sequence
-        self.return_cell = return_cell
         self.grad_clipping = grad_clipping
 
         (self.num_batch, _, num_inputs) = self.input_shape
@@ -659,15 +654,5 @@ class LSTMLayer(Layer):
             # no need to dimshuffle because we return the last state
             hid_out = hid_out[-1]
         output = hid_out
-
-        # repeat for cell values if needed
-        if self.return_cell:
-            if self.return_sequence:
-                cell_out = cell_out.dimshuffle(1, 0, 2)
-                if self.backwards:
-                    cell_out = cell_out[:, ::-1, :]
-            else:
-                cell_out = cell_out[-1]
-            output = [cell_out, output]
 
         return output

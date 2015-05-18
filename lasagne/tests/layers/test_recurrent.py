@@ -88,26 +88,12 @@ def test_lstm_return_seq_true():
 
     l_lstm = LSTMLayer(l_inp,
                        num_units=num_units,
-                       return_cell=False,
                        return_sequence=True)
     l_out = helper.get_output(l_lstm, x, mask=mask)
     f_lstm = theano.function([x, mask], l_out)
     f_out = f_lstm(x_in, mask_in)
 
     assert f_out.shape == (num_batch, seq_len, num_units)
-
-    l_lstm = LSTMLayer(l_inp,
-                       num_units=num_units,
-                       return_cell=True,
-                       return_sequence=True)
-    l_out = helper.get_output(l_lstm, x, mask=mask)
-    f_lstm = theano.function([x, mask], l_out)
-    f_out = f_lstm(x_in, mask_in)
-
-    # check that the returned shape is correct
-    assert len(f_out) == 2
-    assert f_out[0].shape == (num_batch, seq_len, num_units)
-    assert f_out[1].shape == (num_batch, seq_len, num_units)
 
 
 def test_lstm_return_seq_false():
@@ -122,26 +108,12 @@ def test_lstm_return_seq_false():
 
     l_lstm = LSTMLayer(l_inp,
                        num_units=num_units,
-                       return_cell=False,
                        return_sequence=False)
     l_out = helper.get_output(l_lstm, x, mask=mask)
     f_lstm = theano.function([x, mask], l_out)
     f_out = f_lstm(x_in, mask_in)
 
     assert f_out.shape == (num_batch, num_units)
-
-    l_lstm = LSTMLayer(l_inp,
-                       num_units=num_units,
-                       return_cell=True,
-                       return_sequence=False)
-    l_out = helper.get_output(l_lstm, x, mask=mask)
-    f_lstm = theano.function([x, mask], l_out)
-    f_out = f_lstm(x_in, mask_in)
-
-    # check that the returned shape is correct
-    assert len(f_out) == 2
-    assert f_out[0].shape == (num_batch, num_units)
-    assert f_out[1].shape == (num_batch, num_units)
 
 
 def test_lstm_grad():
@@ -152,7 +124,6 @@ def test_lstm_grad():
     l_inp = InputLayer((num_batch, seq_len, n_features))
     l_lstm = LSTMLayer(l_inp,
                        num_units=num_units,
-                       return_cell=False,
                        return_sequence=False)
     l_out = helper.get_output(l_lstm, x, mask=mask)
     g = T.grad(T.mean(l_out), lasagne.layers.get_all_params(l_lstm))
