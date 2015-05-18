@@ -56,11 +56,6 @@ class CustomRecurrentLayer(Layer):
     gradient_steps : int
         Number of timesteps to include in backpropagated gradient
         If -1, backpropagate through the entire sequence
-    return_sequence : boolean
-        Specifies if the recurrent layer should output the hidden state for all
-        positions in the sequence or only for the last position. If true the
-        output shape is (num_batch, sequence_lengt, num_units) if false the
-        output shape is (num_batch, num_units).
     grad_clipping: False or float
         If float the gradient messages are clipped during the backward pass.
         See [1]_ (p. 6) for further explanation.
@@ -76,7 +71,6 @@ class CustomRecurrentLayer(Layer):
                  backwards=False,
                  learn_init=False,
                  gradient_steps=-1,
-                 return_sequence=True,
                  grad_clipping=False):
 
         super(CustomRecurrentLayer, self).__init__(incoming)
@@ -86,7 +80,6 @@ class CustomRecurrentLayer(Layer):
         self.learn_init = learn_init
         self.backwards = backwards
         self.gradient_steps = gradient_steps
-        self.return_sequence = return_sequence
         self.grad_clipping = grad_clipping
 
         # check that output shapes match
@@ -121,10 +114,7 @@ class CustomRecurrentLayer(Layer):
             return params
 
     def get_output_shape_for(self, input_shape):
-        if self.return_sequence:
-            return input_shape[0], input_shape[1], self.num_units
-        else:
-            return input_shape[0], self.num_units
+        return input_shape[0], input_shape[1], self.num_units
 
     def get_output_for(self, input, mask=None, **kwargs):
         """
@@ -197,16 +187,13 @@ class CustomRecurrentLayer(Layer):
             outputs_info=[hid_init],
             truncate_gradient=self.gradient_steps)[0]
 
-        if self.return_sequence:
-            # dimshuffle back to (n_batch, n_time_steps, n_features))
-            hid_out = hid_out.dimshuffle(1, 0, 2)
+        # dimshuffle back to (n_batch, n_time_steps, n_features))
+        hid_out = hid_out.dimshuffle(1, 0, 2)
 
-            # if scan is backward reverse the output
-            if self.backwards:
-                hid_out = hid_out[:, ::-1, :]
-        else:
-            # no need to dimshuffle because we return the last state
-            hid_out = hid_out[-1]
+        # if scan is backward reverse the output
+        if self.backwards:
+            hid_out = hid_out[:, ::-1, :]
+
         return hid_out
 
 
@@ -238,11 +225,6 @@ class RecurrentLayer(CustomRecurrentLayer):
     gradient_steps : int
         Number of timesteps to include in backpropagated gradient
         If -1, backpropagate through the entire sequence
-    return_sequence : boolean
-        Specifies if the recurrent layer should output the hidden state for all
-        positions in the sequence or only for the last position. If true the
-        output shape is (num_batch, sequence_lengt, num_units) if false the
-        output shape is (num_batch, num_units).
     grad_clipping: False or float
         If float the gradient messages are clipped during the backward pass.
         See [1]_ (p. 6) for further explanation.
@@ -261,7 +243,6 @@ class RecurrentLayer(CustomRecurrentLayer):
                  backwards=False,
                  learn_init=False,
                  gradient_steps=-1,
-                 return_sequence=True,
                  grad_clipping=False):
         input_shape = helper.get_output_shape(incoming)
         n_batch = input_shape[0]
@@ -279,7 +260,7 @@ class RecurrentLayer(CustomRecurrentLayer):
         super(RecurrentLayer, self).__init__(
             incoming, in_to_hid, hid_to_hid, nonlinearity=nonlinearity,
             hid_init=hid_init, backwards=backwards, learn_init=learn_init,
-            gradient_steps=gradient_steps, return_sequence=return_sequence,
+            gradient_steps=gradient_steps,
             grad_clipping=grad_clipping)
 
 
@@ -353,11 +334,6 @@ class LSTMLayer(Layer):
     gradient_steps : int
         Number of timesteps to include in backpropagated gradient
         If -1, backpropagate through the entire sequence
-    return_sequence : boolean
-        Specifies if the LSTM should output the hidden state for all positions
-        in the sequence or only for the last position. If true the output
-        shape is (num_batch, sequence_lengt, num_units) if false the output
-        shape is (num_batch, num_units).
     grad_clipping: False or float
         If float the gradient messages are clipped during the backward pass.
         See [1]_ (p. 6) for further explanation.
@@ -396,7 +372,6 @@ class LSTMLayer(Layer):
                  learn_init=False,
                  peepholes=True,
                  gradient_steps=-1,
-                 return_sequence=True,
                  grad_clipping=False):
 
         # todo: add subnetwork option.
@@ -435,7 +410,6 @@ class LSTMLayer(Layer):
         self.backwards = backwards
         self.peepholes = peepholes
         self.gradient_steps = gradient_steps
-        self.return_sequence = return_sequence
         self.grad_clipping = grad_clipping
 
         (self.num_batch, _, num_inputs) = self.input_shape
@@ -519,10 +493,7 @@ class LSTMLayer(Layer):
             trainable=learn_init, regularizable=False)
 
     def get_output_shape_for(self, input_shape):
-        if self.return_sequence:
-            return input_shape[0], input_shape[1], self.num_units
-        else:
-            return input_shape[0], self.num_units
+        return input_shape[0], input_shape[1], self.num_units
 
     def get_output_for(self, input, mask=None, **kwargs):
         """
@@ -643,16 +614,11 @@ class LSTMLayer(Layer):
             go_backwards=self.backwards,
             truncate_gradient=self.gradient_steps)[0]
 
-        if self.return_sequence:
-            # dimshuffle back to (n_batch, n_time_steps, n_features))
-            hid_out = hid_out.dimshuffle(1, 0, 2)
+        # dimshuffle back to (n_batch, n_time_steps, n_features))
+        hid_out = hid_out.dimshuffle(1, 0, 2)
 
-            # if scan is backward reverse the output
-            if self.backwards:
-                hid_out = hid_out[:, ::-1, :]
-        else:
-            # no need to dimshuffle because we return the last state
-            hid_out = hid_out[-1]
-        output = hid_out
+        # if scan is backward reverse the output
+        if self.backwards:
+            hid_out = hid_out[:, ::-1, :]
 
-        return output
+        return hid_out
