@@ -4,6 +4,8 @@ import theano
 import theano.tensor as T
 import os
 import time
+import sys
+
 
 import lasagne
 
@@ -104,16 +106,16 @@ vocab_map = {}
 vocab_idx = [0]
 
 BATCH_SIZE = 20
-MODEL_SEQ_LEN = 100
+MODEL_SEQ_LEN = 20
 x_train = traindata(MODEL_SEQ_LEN, vocab_map, vocab_idx)
 x_test, mask_test = testdata(MODEL_SEQ_LEN, BATCH_SIZE, vocab_map, vocab_idx)
 x_valid = validdata(MODEL_SEQ_LEN, vocab_map, vocab_idx)
 
-LARGE_MODEL = False
+LARGE_MODEL = True
 vocab_size = vocab_idx[0]
 TOL = 1e-6
-lr = 1e-2
-eval_freq = 1   # number of batches between eval
+lr = 1e-3
+eval_freq = 10000000   # number of batches between eval
 
 
 if LARGE_MODEL:
@@ -121,13 +123,13 @@ if LARGE_MODEL:
     rec_num_units = 1500
     embedding_size = rec_num_units
     num_epochs = 100
-    dropout = 0.65
+    dropout_frac = 0.65
 else:
     ini = lasagne.init.Uniform(0.1)
     rec_num_units = 200
     embedding_size = rec_num_units
     num_epochs = 10
-    dropout = 0
+    dropout_frac = 0
 
 
 
@@ -148,57 +150,63 @@ print("-" * 80)
 #
 #    embedding -> LSTM1 --> LSTM2 --> output network------> predictions
 
-l_inp = lasagne.layers.InputLayer((BATCH_SIZE, MODEL_SEQ_LEN))
 
-l_emb = lasagne.layers.EmbeddingLayer(
-    l_inp,
-    input_size=vocab_size,  # size of embedding = number of words
-    output_size=embedding_size,  # vector size used to represent each word
-    W=ini)
+def build_model(batch_size, model_seq_len):
+    l_inp = lasagne.layers.InputLayer((batch_size, model_seq_len))
 
-if dropout > 0:
-    l_emb = dropout(l_emb, p=dropout)
+    l_emb = lasagne.layers.EmbeddingLayer(
+        l_inp,
+        input_size=vocab_size,  # size of embedding = number of words
+        output_size=embedding_size,  # vector size used to represent each word
+        W=ini)
 
-# first layer
-l_rec1 = lasagne.layers.LSTMLayer(
-    l_emb,
-    num_units=rec_num_units,
-    peepholes=False,
-    W_hid_to_cell=ini,
-    W_in_to_cell=ini,
-    W_hid_to_forgetgate=ini,
-    W_in_to_forgetgate=ini,
-    W_hid_to_ingate=ini,
-    W_in_to_ingate=ini,
-    W_hid_to_outgate=ini,
-    W_in_to_outgate=ini)
+    if dropout_frac > 0:
+        l_emb = lasagne.layers.DropoutLayer(l_emb, p=dropout_frac)
 
-if dropout > 0:
-    l_rec1 = dropout(l_rec1, p=dropout)
+    # first layer
+    l_rec1 = lasagne.layers.LSTMLayer(
+        l_emb,
+        num_units=rec_num_units,
+        peepholes=False,
+        W_hid_to_cell=ini,
+        W_in_to_cell=ini,
+        W_hid_to_forgetgate=ini,
+        W_in_to_forgetgate=ini,
+        W_hid_to_ingate=ini,
+        W_in_to_ingate=ini,
+        W_hid_to_outgate=ini,
+        W_in_to_outgate=ini)
 
-l_rec2 = lasagne.layers.LSTMLayer(
-    l_rec1,
-    num_units=rec_num_units,
-    peepholes=False,
-    W_hid_to_cell=ini,
-    W_in_to_cell=ini,
-    W_hid_to_forgetgate=ini,
-    W_in_to_forgetgate=ini,
-    W_hid_to_ingate=ini,
-    W_in_to_ingate=ini,
-    W_hid_to_outgate=ini,
-    W_in_to_outgate=ini)
-# output_network=output_network)
+    if dropout_frac > 0:
+        l_rec1 =  lasagne.layers.DropoutLayer(l_rec1, p=dropout_frac)
 
-l_shp = lasagne.layers.ReshapeLayer(l_rec2,
-                                    (BATCH_SIZE*MODEL_SEQ_LEN, rec_num_units))
-l_out = lasagne.layers.DenseLayer(l_shp,
-                                  num_units=vocab_size,
-                                  nonlinearity=lasagne.nonlinearities.softmax)
-l_out = lasagne.layers.ReshapeLayer(l_out,
-                                    (BATCH_SIZE, MODEL_SEQ_LEN, vocab_size))
+    l_rec2 = lasagne.layers.LSTMLayer(
+        l_rec1,
+        num_units=rec_num_units,
+        peepholes=False,
+        W_hid_to_cell=ini,
+        W_in_to_cell=ini,
+        W_hid_to_forgetgate=ini,
+        W_in_to_forgetgate=ini,
+        W_hid_to_ingate=ini,
+        W_in_to_ingate=ini,
+        W_hid_to_outgate=ini,
+        W_in_to_outgate=ini)
+    # output_network=output_network)
+
+    l_shp = lasagne.layers.ReshapeLayer(l_rec2,
+                                        (batch_size*model_seq_len, rec_num_units))
+    l_out = lasagne.layers.DenseLayer(l_shp,
+                                      num_units=vocab_size,
+                                      nonlinearity=lasagne.nonlinearities.softmax)
+    l_out = lasagne.layers.ReshapeLayer(l_out,
+                                        (batch_size, model_seq_len, vocab_size))
+    return l_out
 
 # Define symbolic theano variables
+
+l_out = build_model(BATCH_SIZE, MODEL_SEQ_LEN)
+#l_out_test = build_model(1, x_test.shape[0]-1)
 sym_x = T.imatrix()
 
 
@@ -209,8 +217,8 @@ def calc_cross_ent(net_output):
     :param net_output:
     :return:
     """
-    preds = net_output[:, 1:]  # take all but first word
-    targets = sym_x[:, :-1]  # take all but last word
+    preds = net_output[:, :-1]
+    targets = sym_x[:, 1:]
 
     # we need to flatten x_preds and x_targets
     preds = T.reshape(preds, (BATCH_SIZE * (MODEL_SEQ_LEN - 1), vocab_size))
@@ -219,17 +227,18 @@ def calc_cross_ent(net_output):
 
     cost = T.nnet.categorical_crossentropy(preds, targets)
 
-    return cost
+    return cost, preds
 
 # note the use of deterministic keyword to disable dropout during eval
 train_out = lasagne.layers.get_output(l_out, sym_x, deterministic=False)
 eval_out = lasagne.layers.get_output(l_out, sym_x, deterministic=True)
+#test_out = lasagne.layers.get_output(l_out_test, sym_x, deterministic=True)
 
-cost_temp = calc_cross_ent(train_out)
+cost_temp, preds_train = calc_cross_ent(train_out)
 cost_train = T.mean(cost_temp)
 cost_train_sum = T.sum(cost_temp)
 
-cost_eval = T.sum(calc_cross_ent(train_out))
+cost_eval = T.sum(calc_cross_ent(train_out)[0])
 
 # given a list of parameters and a cost function theano will automatiacally
 # calculate the gradients
@@ -238,26 +247,19 @@ all_grads = T.grad(cost_train, all_params)
 
 # Wit the gradients for each parameter we can calcualte update rules for each
 # parameter. Lasagne implements a number of update rules, here we'll use
-# RMSprop and step_scaling
+# Adam and step_scaling
 all_grads, norm, multiplier = lasagne.updates.step_scaling(all_grads, 5.0)
-updates = lasagne.updates.rmsprop(all_grads, all_params, learning_rate=lr)
+updates = lasagne.updates.adam(all_grads, all_params, learning_rate=lr)
 
 # define training function. The update arg specifies that the parameters
-# should be updated using the rmsprop updates.
+# should be updated using the adam updates.
+print("compiling f_train...")
 f_train = theano.function(
     [sym_x], [cost_train, cost_train_sum, norm], updates=updates)
 
 # Define eval function.
+print("compiling f_eval...")
 f_eval = theano.function([sym_x], [cost_eval], )
-
-
-test_batch = x_test[:BATCH_SIZE*MODEL_SEQ_LEN].reshape(
-    (BATCH_SIZE, MODEL_SEQ_LEN))
-test_mask = mask_test[:BATCH_SIZE*MODEL_SEQ_LEN].reshape(
-    (BATCH_SIZE, MODEL_SEQ_LEN)).astype('float32')
-ft = f_train(test_batch)
-fe,  = f_eval(test_batch)
-
 
 def calc_perplexity(x):
     """
@@ -292,6 +294,8 @@ for epoch in range(num_epochs):
     idx = np.random.choice(x_train.shape[0], n_batches_train*bs, replace=True)
 
     l_cost, l_norm = [], []
+
+    batch_time = time.time()
     for i in range(n_batches_train):
         this_batch = batches[i]
         this_indices = idx[this_batch]
@@ -300,11 +304,15 @@ for epoch in range(num_epochs):
         l_cost.append(cost_sum)
         l_norm.append(norm)
 
-        if (i+1) % eval_freq == 0:
-            l = BATCH_SIZE*(MODEL_SEQ_LEN-1)*len(l_cost)
+        if (i+1) % eval_freq == 0 or i+1 == n_batches_train:
+            elapsed = time.time() - batch_time
+            words_per_second = float(BATCH_SIZE*(MODEL_SEQ_LEN)*len(l_cost)) / elapsed
+            n_words_evaluated = BATCH_SIZE*(MODEL_SEQ_LEN-1)*len(l_cost)
             perplexity_valid = calc_perplexity(x_valid)
-            perplexity_train = np.exp(np.sum(l_cost) / l)
+            perplexity_train = np.exp(np.sum(l_cost) / n_words_evaluated)
             print("Epoch           :", float(len(l_cost)) / n_batches_train)
             print("Perplexity Train:", perplexity_train)
             print("Perplexity valid:", perplexity_valid)
+            print("Words per second:", words_per_second)
             l_cost = []
+            batch_time = 0

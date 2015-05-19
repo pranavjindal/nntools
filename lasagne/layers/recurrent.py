@@ -730,8 +730,13 @@ class LSTMLayer(Layer):
 
         # repeat cell and hid init to batch size
         ones = T.ones((self.num_batch, 1))
-        hid_init = T.dot(ones, self.hid_init)
-        cell_init = T.dot(ones, self.cell_init)
+
+        if self.num_batch > 1:
+            hid_init = T.dot(ones, self.hid_init)
+            cell_init = T.dot(ones, self.cell_init)
+        else:
+            hid_init = self.hid_init
+            cell_init = self.cell_init
         init = [hid_init, cell_init]
 
         if self.output_network is not None:
