@@ -340,6 +340,8 @@ class LSTMLayer(Layer):
         :math:`c_0`
     hid_init : function or np.ndarray or theano.shared
         :math:`h_0`
+    hid_init : function or np.ndarray or theano.shared
+        If ouput_network is not None then this is used to initialize y
     backwards : boolean
         If True, process the sequence backwards and then reverse the
         output again such that the output from the layer is always
@@ -364,6 +366,9 @@ class LSTMLayer(Layer):
     grad_clipping: False or float
         If float the gradient messages are clipped during the backward pass.
         See [1]_ (p. 6) for further explanation.
+    output_network : None or :class:`lasagne.layers.Layer`
+        If not none then then the layer is used to calculate predictions
+        that are used as input for the next time step in the LSTM.
 
     References
     ----------
@@ -391,17 +396,23 @@ class LSTMLayer(Layer):
                  W_hid_to_outgate=init.Normal(0.1),
                  W_cell_to_outgate=init.Normal(0.1),
                  b_outgate=init.Normal(0.1),
+                 W_y_to_ingate=init.Normal(0.1),
+                 W_y_to_forgetgate=init.Normal(0.1),
+                 W_y_to_cell=init.Normal(0.1),
+                 W_y_to_outgate=init.Normal(0.1),
                  nonlinearity_outgate=nonlinearities.sigmoid,
                  nonlinearity_out=nonlinearities.tanh,
                  cell_init=init.Constant(0.),
                  hid_init=init.Constant(0.),
+                 y_init=init.Constant(0.),
                  backwards=False,
                  learn_init=False,
                  peepholes=True,
                  gradient_steps=-1,
                  return_sequence=True,
                  return_cell=False,
-                 grad_clipping=False):
+                 grad_clipping=False,
+                 output_network=None):
 
         # todo: add subnetwork option.
 
@@ -442,6 +453,7 @@ class LSTMLayer(Layer):
         self.return_sequence = return_sequence
         self.return_cell = return_cell
         self.grad_clipping = grad_clipping
+        self.output_network = output_network
 
         (self.num_batch, _, num_inputs) = self.input_shape
 
@@ -523,11 +535,62 @@ class LSTMLayer(Layer):
             hid_init, (1, num_units), name="hid_init",
             trainable=learn_init, regularizable=False)
 
+        if self.output_network is not None:
+            num_classes = helper.get_output_shape(self.output_network)[-1]
+            self.y_init = self.add_param(
+                y_init, (1, num_classes), name="y_init",
+                trainable=learn_init, regularizable=False)
+
+            self.W_y_to_ingate = self.add_param(
+                W_y_to_ingate, (num_classes, num_units),
+                name="W_y_to_ingate")
+
+            self.W_y_to_forgetgate = self.add_param(
+                W_y_to_forgetgate, (num_classes, num_units),
+                name="W_y_to_forgetgate")
+
+            self.W_y_to_cell = self.add_param(
+                W_y_to_cell, (num_classes, num_units),
+                name="W_y_to_celll")
+
+            self.W_y_to_outgate = self.add_param(
+                W_y_to_outgate, (num_classes, num_units),
+                name="W_in_to_outgate")
+
+            self.W_y_to_gates = T.concatenate(
+                [self.W_y_to_ingate, self.W_y_to_forgetgate,
+                 self.W_y_to_cell, self.W_y_to_outgate], axis=1)
+
+    def get_params(self, **tags):
+        params = list(self.params.keys())
+
+        only = set(tag for tag, value in tags.items() if value)
+        if only:
+            # retain all parameters that have all of the tags in `only`
+            params = [param for param in params
+                      if not (only - self.params[param])]
+
+        exclude = set(tag for tag, value in tags.items() if not value)
+        if exclude:
+            # retain all parameters that have none of the tags in `exclude`
+            params = [param for param in params
+                      if not (self.params[param] & exclude)]
+
+        if self.output_network is not None:
+            params += helper.get_all_params(self.output_network, **tags)
+
+        return params
+
     def get_output_shape_for(self, input_shape):
-        if self.return_sequence:
-            return input_shape[0], input_shape[1], self.num_units
+        if self.output_network is None:
+            num_outputs = self.num_units
         else:
-            return input_shape[0], self.num_units
+            num_outputs = helper.get_output_shape(self.output_network)[-1]
+
+        if self.return_sequence:
+            return input_shape[0], input_shape[1], num_outputs
+        else:
+            return input_shape[0], num_outputs
 
     def get_output_for(self, input, mask=None, **kwargs):
         """
@@ -608,7 +671,12 @@ class LSTMLayer(Layer):
                 outgate += cell*self.W_cell_to_outgate
             # Compute new hidden unit activation
             hid = outgate*self.nonlinearity_out(cell)
-            return [cell, hid]
+
+            if self.output_network is None:
+                return [cell, hid]
+            else:
+                y = helper.get_output(self.output_network, hid, **kwargs)
+                return [cell, hid, y]
 
         def step_masked(input_dot_w_n, mask_n, cell_previous, hid_previous):
 
@@ -623,30 +691,65 @@ class LSTMLayer(Layer):
 
             return [cell, hid]
 
+        def step_feedback(input_dot_w_n, cell_previous, hid_previous,
+                          y_previous):
+            input_dot_w_n += T.dot(y_previous, self.W_y_to_gates)
+            cell, hid, y = step(input_dot_w_n, cell_previous, hid_previous)
+
+            return [cell, hid, y]
+
+        def step_feedback_masked(input_dot_w_n, mask_n, cell_previous,
+                                 hid_previous, y_previous):
+            input_dot_w_n += T.dot(y_previous, self.W_y_to_gates)
+            cell, hid, y = step(input_dot_w_n, cell_previous, hid_previous)
+            not_mask = 1 - mask_n
+            cell = cell*mask_n + cell_previous*not_mask
+            hid = hid*mask_n + hid_previous*not_mask
+            y = y*mask_n + y_previous*mask_n
+
+            return [cell, hid, y]
+
         if mask is not None:
             # mask is given as (batch_size, seq_len). Because scan iterates
             # over first dimension, we dimshuffle to (seq_len, batch_size) and
             # add a broadcastable dimension
             mask = mask.dimshuffle(1, 0, 'x')
             sequences = [input_dot_w, mask]
-            step_fun = step_masked
+
+            if self.output_network is None:
+                step_fun = step_masked
+            else:
+                step_fun = step_feedback_masked
         else:
             sequences = input_dot_w
-            step_fun = step
+
+            if self.output_network is None:
+                step_fun = step
+            else:
+                step_fun = step_feedback
 
         # repeat cell and hid init to batch size
         ones = T.ones((self.num_batch, 1))
         hid_init = T.dot(ones, self.hid_init)
         cell_init = T.dot(ones, self.cell_init)
+        init = [hid_init, cell_init]
+
+        if self.output_network is not None:
+            init += [T.dot(ones, self.y_init)]
 
         # Scan op iterates over first dimension of input and repeatedly
         # applies the step function
-        cell_out, hid_out = theano.scan(
+        output = theano.scan(
             step_fun,
             sequences=sequences,
-            outputs_info=[cell_init, hid_init],
+            outputs_info=init,
             go_backwards=self.backwards,
             truncate_gradient=self.gradient_steps)[0]
+
+        if self.output_network is None:
+            cell_out, hid_out = output
+        else:
+            cell_out, _, hid_out = output
 
         if self.return_sequence:
             # dimshuffle back to (n_batch, n_time_steps, n_features))

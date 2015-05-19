@@ -178,3 +178,44 @@ def test_lstm_nparams_learn_init():
     l_lstm = LSTMLayer(l_inp, 5, peepholes=False, learn_init=True)
     assert len(lasagne.layers.get_all_params(l_lstm, trainable=True)) == 14
     assert len(lasagne.layers.get_all_params(l_lstm, regularizable=False)) == 6
+
+
+# New tests
+def test_lstm_nparams_outputnetwork():
+    from lasagne.layers import DenseLayer
+    nhid = 5
+    nbatch = 7
+    nhid_out = 9
+    output_network = DenseLayer(InputLayer((nbatch, nhid)), nhid_out)
+    l_inp = InputLayer((nbatch, 2, 3))
+    l_lstm = LSTMLayer(l_inp, nhid, peepholes=False, learn_init=False,
+                       output_network=output_network)
+
+    assert len(lasagne.layers.get_all_params(l_lstm, trainable=True)) == 18
+    assert len(lasagne.layers.get_all_params(l_lstm, regularizable=False)) == 8
+
+
+def test_lstm_outputnetwork_return_size():
+    from lasagne.layers import DenseLayer
+    num_batch, seq_len, n_features = 5, 3, 10
+    num_units = 6
+    num_units_out = 9
+    x = T.tensor3()
+    mask = T.matrix()
+    output_network = DenseLayer(
+        InputLayer((num_batch, num_units)), num_units_out)
+    l_inp = InputLayer((num_batch, seq_len, n_features))
+
+    x_in = np.random.random((num_batch, seq_len, n_features)).astype('float32')
+    mask_in = np.random.random((num_batch, seq_len)).astype('float32')
+
+    l_lstm = LSTMLayer(l_inp,
+                       num_units=num_units,
+                       return_cell=False,
+                       return_sequence=True,
+                       output_network=output_network)
+    l_out = helper.get_output(l_lstm, x, mask=mask)
+    f_lstm = theano.function([x, mask], l_out)
+    f_out = f_lstm(x_in, mask_in)
+
+    assert f_out.shape == (num_batch, seq_len, num_units_out)
