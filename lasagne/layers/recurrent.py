@@ -105,13 +105,10 @@ class CustomRecurrentLayer(Layer):
                                        trainable=learn_init, name="hid_init")
 
     def get_params(self, **tags):
-        params = (helper.get_all_params(self.input_to_hidden, **tags) +
-                  helper.get_all_params(self.hidden_to_hidden, **tags))
-
-        if self.learn_init:
-            return params + [self.hid_init]
-        else:
-            return params
+        params = super(CustomRecurrentLayer, self).get_params(**tags)
+        params += helper.get_all_params(self.input_to_hidden, **tags)
+        params += helper.get_all_params(self.hidden_to_hidden, **tags)
+        return params
 
     def get_output_shape_for(self, input_shape):
         return input_shape[0], input_shape[1], self.num_units

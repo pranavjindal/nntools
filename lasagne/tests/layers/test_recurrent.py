@@ -50,7 +50,7 @@ def test_recurrent_nparams_learn_init():
     l_inp = InputLayer((1, 2, 3))
     l_rec = RecurrentLayer(l_inp, 5, learn_init=True)
     assert len(lasagne.layers.get_all_params(l_rec, trainable=True)) == 4
-    assert len(lasagne.layers.get_all_params(l_rec, regularizable=False)) == 2
+    assert len(lasagne.layers.get_all_params(l_rec, regularizable=False)) == 1
 
 
 def test_lstm_return_shape():
