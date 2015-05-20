@@ -234,7 +234,9 @@ l_rec1 = lasagne.layers.LSTMLayer(
     hid_init_val=[cell1_init_sym, hid1_init_sym])
 
 if dropout_frac > 0:
-    l_rec1 = lasagne.layers.DropoutLayer(l_rec1, p=dropout_frac)
+    l_drp1 = lasagne.layers.DropoutLayer(l_rec1, p=dropout_frac)
+else:
+    l_drp1 = l_rec1
 
 l_rec2 = lasagne.layers.LSTMLayer(
     l_rec1,
@@ -253,9 +255,11 @@ l_rec2 = lasagne.layers.LSTMLayer(
 # output_network=output_network)
 
 if dropout_frac > 0:
-    l_rec2 = lasagne.layers.DropoutLayer(l_rec2, p=dropout_frac)
+    l_drp2 = lasagne.layers.DropoutLayer(l_rec2, p=dropout_frac)
+else:
+    l_drp2 = l_rec2
 
-l_shp = lasagne.layers.ReshapeLayer(l_rec2,
+l_shp = lasagne.layers.ReshapeLayer(l_drp2,
                                     (BATCH_SIZE*MODEL_SEQ_LEN, REC_NUM_UNITS))
 l_out = lasagne.layers.DenseLayer(l_shp,
                                   num_units=vocab_size,
@@ -290,7 +294,8 @@ all_params = lasagne.layers.get_all_params(l_out, trainable=True)
 # MODEL_SEQ_LEN. This is to be consistent with
 # https://github.com/wojzaremba/lstm . The scaling is due to difference
 # between torch and theano.
-# We could have also scaled the learning rate.
+# We could have also scaled the learning rate, and also rescaled the
+# norm constraint.
 all_grads = T.grad(cost_train*MODEL_SEQ_LEN, all_params)
 
 # With the gradients for each parameter we can calculate update rules for each
