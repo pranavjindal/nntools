@@ -412,7 +412,8 @@ class LSTMLayer(Layer):
                  return_sequence=True,
                  return_cell=False,
                  grad_clipping=False,
-                 output_network=None):
+                 output_network=None,
+                 hid_init_val=None):
 
         # todo: add subnetwork option.
 
@@ -454,6 +455,7 @@ class LSTMLayer(Layer):
         self.return_cell = return_cell
         self.grad_clipping = grad_clipping
         self.output_network = output_network
+        self.hid_init_val = hid_init_val
 
         (self.num_batch, _, num_inputs) = self.input_shape
 
@@ -530,10 +532,10 @@ class LSTMLayer(Layer):
         # Setup initial values for the cell and the hidden units
         self.cell_init = self.add_param(
             cell_init, (1, num_units), name="cell_init",
-            trainable=learn_init, regularizable=False)
+            trainable=learn_init, regularizable=False, recurrent_init=True)
         self.hid_init = self.add_param(
             hid_init, (1, num_units), name="hid_init",
-            trainable=learn_init, regularizable=False)
+            trainable=learn_init, regularizable=False, recurrent_init=True)
 
         if self.output_network is not None:
             num_classes = helper.get_output_shape(self.output_network)[-1]
@@ -731,13 +733,17 @@ class LSTMLayer(Layer):
         # repeat cell and hid init to batch size
         ones = T.ones((self.num_batch, 1))
 
-        if self.num_batch > 1:
-            hid_init = T.dot(ones, self.hid_init)
-            cell_init = T.dot(ones, self.cell_init)
+
+        if self.hid_init_val is None:
+            if self.num_batch > 1:
+                hid_init = T.dot(ones, self.hid_init)
+                cell_init = T.dot(ones, self.cell_init)
+            else:
+                hid_init = self.hid_init
+                cell_init = self.cell_init
+            init = [hid_init, cell_init]
         else:
-            hid_init = self.hid_init
-            cell_init = self.cell_init
-        init = [hid_init, cell_init]
+            init = self.hid_init_val
 
         if self.output_network is not None:
             init += [T.dot(ones, self.y_init)]
@@ -756,6 +762,10 @@ class LSTMLayer(Layer):
         else:
             cell_out, _, hid_out = output
 
+
+        self.cell = cell_out.dimshuffle(1, 0, 2)
+        self.hid = hid_out.dimshuffle(1, 0, 2)
+
         if self.return_sequence:
             # dimshuffle back to (n_batch, n_time_steps, n_features))
             hid_out = hid_out.dimshuffle(1, 0, 2)
@@ -768,14 +778,9 @@ class LSTMLayer(Layer):
             hid_out = hid_out[-1]
         output = hid_out
 
-        # repeat for cell values if needed
-        if self.return_cell:
-            if self.return_sequence:
-                cell_out = cell_out.dimshuffle(1, 0, 2)
-                if self.backwards:
-                    cell_out = cell_out[:, ::-1, :]
-            else:
-                cell_out = cell_out[-1]
-            output = [cell_out, output]
 
         return output
+
+    def get_hidden_values(self):
+        return self.cell, self.hid
+
