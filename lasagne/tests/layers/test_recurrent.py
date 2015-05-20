@@ -42,15 +42,23 @@ def test_recurrent_grad():
 def test_recurrent_nparams():
     l_inp = InputLayer((1, 2, 3))
     l_rec = RecurrentLayer(l_inp, 5, learn_init=False)
+
+    # b, W_hid_to_hid and W_in_to_hid
     assert len(lasagne.layers.get_all_params(l_rec, trainable=True)) == 3
-    assert len(lasagne.layers.get_all_params(l_rec, regularizable=False)) == 1
+
+    # b + hid_init
+    assert len(lasagne.layers.get_all_params(l_rec, regularizable=False)) == 2
 
 
 def test_recurrent_nparams_learn_init():
     l_inp = InputLayer((1, 2, 3))
     l_rec = RecurrentLayer(l_inp, 5, learn_init=True)
+
+    # b, W_hid_to_hid and W_in_to_hid + hid_init
     assert len(lasagne.layers.get_all_params(l_rec, trainable=True)) == 4
-    assert len(lasagne.layers.get_all_params(l_rec, regularizable=False)) == 1
+
+    # b + hid_init
+    assert len(lasagne.layers.get_all_params(l_rec, regularizable=False)) == 2
 
 
 def test_lstm_return_shape():
@@ -86,19 +94,34 @@ def test_lstm_grad():
 def test_lstm_nparams_no_peepholes():
     l_inp = InputLayer((1, 2, 3))
     l_lstm = LSTMLayer(l_inp, 5, peepholes=False, learn_init=False)
+
+    # 3*n_gates
+    # the 3 is because we have  hid_to_gate, in_to_gate and bias for each gate
     assert len(lasagne.layers.get_all_params(l_lstm, trainable=True)) == 12
+
+    # bias params + init params
     assert len(lasagne.layers.get_all_params(l_lstm, regularizable=False)) == 6
 
 
 def test_lstm_nparams_peepholes():
     l_inp = InputLayer((1, 2, 3))
     l_lstm = LSTMLayer(l_inp, 5, peepholes=True, learn_init=False)
+
+    # 3*n_gates + peepholes(3).
+    # the 3 is because we have  hid_to_gate, in_to_gate and bias for each gate
     assert len(lasagne.layers.get_all_params(l_lstm, trainable=True)) == 15
+
+    # bias params(4) + init params(2)
     assert len(lasagne.layers.get_all_params(l_lstm, regularizable=False)) == 6
 
 
 def test_lstm_nparams_learn_init():
     l_inp = InputLayer((1, 2, 3))
     l_lstm = LSTMLayer(l_inp, 5, peepholes=False, learn_init=True)
+
+    # 3*n_gates + inits(2).
+    # the 3 is because we have  hid_to_gate, in_to_gate and bias for each gate
     assert len(lasagne.layers.get_all_params(l_lstm, trainable=True)) == 14
+
+    # bias params(4) + init params(2)
     assert len(lasagne.layers.get_all_params(l_lstm, regularizable=False)) == 6

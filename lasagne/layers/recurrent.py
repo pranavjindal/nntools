@@ -102,7 +102,8 @@ class CustomRecurrentLayer(Layer):
 
         # Initialize hidden state
         self.hid_init = self.add_param(hid_init, (1, self.num_units),
-                                       trainable=learn_init, name="hid_init")
+                                       trainable=learn_init, name="hid_init",
+                                       regularizable=False)
 
     def get_params(self, **tags):
         params = super(CustomRecurrentLayer, self).get_params(**tags)
