@@ -133,21 +133,35 @@ def test_recurrent_bck():
 
     # need to set random seed.
     np.random.seed(1234)
-    l_rec_fwd = LSTMLayer(l_inp, num_units=num_units, backwards=False)
+    l_rec_fwd = RecurrentLayer(l_inp, num_units=num_units, backwards=False)
     np.random.seed(1234)
-    l_rec_bck = LSTMLayer(l_inp, num_units=num_units, backwards=True)
+    l_rec_bck = RecurrentLayer(l_inp, num_units=num_units, backwards=True)
     l_out_fwd = helper.get_output(l_rec_fwd, x)
     l_out_bck = helper.get_output(l_rec_bck, x)
-    f_rec = theano.function([x], [l_out_fwd, l_out_bck,
-                                  l_rec_fwd.hid_out, l_rec_bck.hid_out])
-    f_out_fwd, f_out_bck, f_hid_out_fwd, f_hid_out_bck = f_rec(x_in)
-
-    # lstm_fwd and lstm_bck have the same weights.
-    # Because the input is symmetric the output from scan should be equal.
-    np.testing.assert_almost_equal(f_hid_out_fwd, f_hid_out_bck)
+    f_rec = theano.function([x], [l_out_fwd, l_out_bck])
+    f_out_fwd, f_out_bck = f_rec(x_in)
 
     # test that the backwards model reverses its final input
     np.testing.assert_almost_equal(f_out_fwd, f_out_bck[:, ::-1])
+
+
+def test_recurrent_self_outvars():
+    # check that outvars are correctly stored and returned
+    num_batch, seq_len, n_features1 = 2, 3, 4
+    num_units = 2
+    x = T.tensor3()
+    in_shp = (num_batch, seq_len, n_features1)
+    l_inp = InputLayer(in_shp)
+
+    x_in = np.ones(in_shp).astype('float32')
+
+    # need to set random seed.
+    l_rec = RecurrentLayer(l_inp, num_units=num_units, backwards=True)
+    l_out = helper.get_output(l_rec, x)
+    f_rec = theano.function([x], [l_out, l_rec.hid_out])
+    f_out, f_out_self = f_rec(x_in)
+
+    np.testing.assert_almost_equal(f_out, f_out_self)
 
 
 def test_lstm_return_shape():
@@ -285,16 +299,31 @@ def test_lstm_bck():
     l_lstm_bck = LSTMLayer(l_inp, num_units=num_units, backwards=True)
     l_out_fwd = helper.get_output(l_lstm_fwd, x)
     l_out_bck = helper.get_output(l_lstm_bck, x)
-    f_lstm = theano.function([x], [l_out_fwd, l_out_bck,
-                                   l_lstm_fwd.hid_out, l_lstm_bck.hid_out])
-    f_out_fwd, f_out_bck, f_hid_out_fwd, f_hid_out_bck = f_lstm(x_in)
-
-    # lstm_fwd and lstm_bck have the same weights.
-    # Because the input is symmetric the output from scan should be equal.
-    np.testing.assert_almost_equal(f_hid_out_fwd, f_hid_out_bck)
+    f_lstm = theano.function([x], [l_out_fwd, l_out_bck])
+    f_out_fwd, f_out_bck = f_lstm(x_in)
 
     # test that the backwards model reverses its final input
     np.testing.assert_almost_equal(f_out_fwd, f_out_bck[:, ::-1])
+
+
+def test_lstm_self_outvars():
+    # check that outvars are correctly stored and returned
+    num_batch, seq_len, n_features1 = 2, 3, 4
+    num_units = 2
+    x = T.tensor3()
+    in_shp = (num_batch, seq_len, n_features1)
+    l_inp = InputLayer(in_shp)
+
+    x_in = np.ones(in_shp).astype('float32')
+
+    # need to set random seed.
+    l_lstm = LSTMLayer(l_inp, num_units=num_units, backwards=True)
+    l_out = helper.get_output(l_lstm, x)
+    f_lstm = theano.function([x], [l_out, l_lstm.hid_out])
+    f_out, f_out_self = f_lstm(x_in)
+
+    np.testing.assert_almost_equal(f_out, f_out_self)
+
 
 #  GRU TESTS
 
@@ -415,13 +444,8 @@ def test_gru_bck():
     l_gru_bck = GRULayer(l_inp, num_units=num_units, backwards=True)
     l_out_fwd = helper.get_output(l_gru_fwd, x)
     l_out_bck = helper.get_output(l_gru_bck, x)
-    f_lstm = theano.function([x], [l_out_fwd, l_out_bck,
-                                   l_gru_fwd.hid_out, l_gru_bck.hid_out])
-    f_out_fwd, f_out_bck, f_hid_out_fwd, f_hid_out_bck = f_lstm(x_in)
-
-    # lstm_fwd and gru_bck have the same weights.
-    # Because the input is symmetric the output from scan should be equal.
-    np.testing.assert_almost_equal(f_hid_out_fwd, f_hid_out_bck)
+    f_lstm = theano.function([x], [l_out_fwd, l_out_bck])
+    f_out_fwd, f_out_bck = f_lstm(x_in)
 
     # test that the backwards model reverses its final input
     np.testing.assert_almost_equal(f_out_fwd, f_out_bck[:, ::-1])

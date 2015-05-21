@@ -871,8 +871,8 @@ class GRULayer(Layer):
         # The step function calculates the following:
         #
 
-        def step(input_dot_w_n, hid_previous):
-            hid_input = T.dot(hid_previous, self.W_hid_to_gates)
+        def step(input_dot_w_n, hid_previous, W_hid_to_gates):
+            hid_input = T.dot(hid_previous, W_hid_to_gates)
 
             if self.grad_clipping is not False:
                 input_dot_w_n = theano.gradient.grad_clip(
@@ -900,9 +900,9 @@ class GRULayer(Layer):
             hid = (1-updategate)*hid_previous + updategate*cell
             return hid
 
-        def step_masked(input_dot_w_n, mask_n, hid_previous):
+        def step_masked(input_dot_w_n, mask_n, hid_previous, W_hid_to_gates):
 
-            hid = step(input_dot_w_n, hid_previous)
+            hid = step(input_dot_w_n, hid_previous, W_hid_to_gates)
 
             # If mask is 0, use previous state until mask = 1 is found.
             # This propagates the layer initial state when moving backwards
@@ -935,7 +935,9 @@ class GRULayer(Layer):
             step_fun,
             sequences=sequences,
             outputs_info=[hid_init],
-            go_backwards=self.backwards)[0]
+            non_sequences=[self.W_hid_to_gates],
+            go_backwards=self.backwards,
+            strict=True)[0]
 
         # dimshuffle back to (n_batch, n_time_steps, n_features))
         hid_out = hid_out.dimshuffle(1, 0, 2)
