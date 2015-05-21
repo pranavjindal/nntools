@@ -1,7 +1,7 @@
 """
 Layers to construct recurrent networks. Recurrent layers can be used similarly
 to feed-forward layers except that the input shape is expected to be
-`(batch_size, sequence_length, num_inputs). The input is allowed to have more
+(batch_size, sequence_length, num_inputs). The input is allowed to have more
 than three dimensions in which case dimensions trailing the third dimension are
 flattened.
 
@@ -16,6 +16,7 @@ by using a few reshape operations, please refer to the recurrent examples for
 further explanations.
 
 """
+import numpy as np
 import theano
 import theano.tensor as T
 from .. import nonlinearities
@@ -47,12 +48,16 @@ class CustomRecurrentLayer(Layer):
         Layer which connects the previous hidden state to the new state
     nonlinearity : function or theano.tensor.elemwise.Elemwise
         Nonlinearity to apply when computing new state
-    hid_init : function or np.ndarray or theano.shared
-        Initial hidden state
+    hid_init : function, np.ndarray, theano.shared or TensorVariable
+        :math:`h_0`. Passing in a TensorVariable allows the user to specify
+        the value of hid_init. In this mode learn_init is ignored.
     backwards : boolean
-        If True, process the sequence backwards
+        If True, process the sequence backwards and then reverse the
+        output again such that the output from the layer is always
+        from x_1 to x_n.
     learn_init : boolean
-        If True, initial hidden values are learned
+        If True, initial hidden values are learned. If hid_init or cell_init
+        are TensorVariables learn_init is ignored.
     gradient_steps : int
         Number of timesteps to include in backpropagated gradient
         If -1, backpropagate through the entire sequence
@@ -83,12 +88,11 @@ class CustomRecurrentLayer(Layer):
         self.grad_clipping = grad_clipping
 
         # check that output shapes match
-        i2h_out = helper.get_output_shape(input_to_hidden)
-        h2h_out = helper.get_output_shape(hidden_to_hidden)
-        if i2h_out != h2h_out:
+        if input_to_hidden.output_shape != hidden_to_hidden.output_shape:
             raise ValueError("The output shape for input_to_hidden and "
                              "input_to_hidden must be equal was, ",
-                             i2h_out, h2h_out)
+                             input_to_hidden.output_shape,
+                             hidden_to_hidden.output_shape)
 
         if nonlinearity is None:
             self.nonlinearity = nonlinearities.identity
@@ -97,13 +101,19 @@ class CustomRecurrentLayer(Layer):
 
         # Get the batch size and number of units based on the expected output
         # of the input-to-hidden layer
-        (self.n_batch, _, self.num_inputs) = self.input_shape
-        self.num_units = i2h_out[-1]
+        self.n_batch = self.input_shape[0]
+        self.num_inputs = np.prod(self.input_shape[2:])
+        self.num_units = input_to_hidden.output_shape[-1]
 
         # Initialize hidden state
-        self.hid_init = self.add_param(hid_init, (1, self.num_units),
-                                       trainable=learn_init, name="hid_init",
-                                       regularizable=False)
+        if isinstance(hid_init, T.TensorVariable):
+            if hid_init.ndim != 2:
+                raise ValueError("When a tensor hid_init should be a matrix")
+            self.hid_init = hid_init
+        else:
+            self.hid_init = self.add_param(
+                hid_init, (1, self.num_units), name="hid_init",
+                trainable=learn_init, regularizable=False)
 
     def get_params(self, **tags):
         params = super(CustomRecurrentLayer, self).get_params(**tags)
@@ -175,8 +185,11 @@ class CustomRecurrentLayer(Layer):
             sequences = input
             step_fun = step
 
-        # repeat hid_init to batch size
-        hid_init = T.dot(T.ones((self.n_batch, 1)), self.hid_init)
+        if isinstance(self.hid_init, T.TensorVariable):
+            hid_init = self.hid_init
+        else:
+            # repeat num_batch times
+            hid_init = T.dot(T.ones((self.n_batch, 1)), self.hid_init)
 
         hid_out = theano.scan(
             step_fun,
@@ -184,6 +197,8 @@ class CustomRecurrentLayer(Layer):
             go_backwards=self.backwards,
             outputs_info=[hid_init],
             truncate_gradient=self.gradient_steps)[0]
+
+        self.hid_out = hid_out
 
         # dimshuffle back to (n_batch, n_time_steps, n_features))
         hid_out = hid_out.dimshuffle(1, 0, 2)
@@ -214,12 +229,16 @@ class RecurrentLayer(CustomRecurrentLayer):
         Initializer for bias vector
     nonlinearity : function or theano.tensor.elemwise.Elemwise
         Nonlinearity to apply when computing new state
-    hid_init : function or np.ndarray or theano.shared
-        Initial hidden state
+    hid_init : function, np.ndarray, theano.shared or TensorVariable
+        :math:`h_0`. Passing in a TensorVariable allows the user to specify
+        the value of hid_init. In this mode learn_init is ignored.
     backwards : boolean
-        If True, process the sequence backwards
+        If True, process the sequence backwards and then reverse the
+        output again such that the output from the layer is always
+        from x_1 to x_n.
     learn_init : boolean
-        If True, initial hidden values are learned
+        If True, initial hidden values are learned. If hid_init or cell_init
+        are TensorVariables learn_init is ignored.
     gradient_steps : int
         Number of timesteps to include in backpropagated gradient
         If -1, backpropagate through the entire sequence
@@ -272,7 +291,7 @@ class LSTMLayer(Layer):
     Parameters
     ----------
     incoming : a :class:`:class:`lasagne.layers.Layer`` instance or a tuple
-        The layer feeding into this layer, or the expected input shape
+        The layer feeding into this layer, or the expected input shape.
     num_units : int
         Number of hidden units in the layer
     W_in_to_ingate : function or np.ndarray or theano.shared
@@ -315,16 +334,19 @@ class LSTMLayer(Layer):
         :math:`\sigma`
     nonlinearity_out : function or np.ndarray or theano.shared
         :math:`\tanh`
-    cell_init : function or np.ndarray or theano.shared
-        :math:`c_0`
-    hid_init : function or np.ndarray or theano.shared
-        :math:`h_0`
+    cell_init : function, np.ndarray, theano.shared or TensorVariable
+        :math:`c_0`. Passing in a TensorVariable allows the user to specify
+        the value of cell_init. In this mode learn_init is ignored.
+    hid_init : function, np.ndarray, theano.shared or TensorVariable
+        :math:`h_0`. Passing in a TensorVariable allows the user to specify
+        the value of hid_init. In this mode learn_init is ignored.
     backwards : boolean
         If True, process the sequence backwards and then reverse the
         output again such that the output from the layer is always
         from x_1 to x_n.
     learn_init : boolean
-        If True, initial hidden values are learned
+        If True, initial hidden values are learned. If hid_init or cell_init
+        are TensorVariables learn_init is ignored.
     peepholes : boolean
         If True, the LSTM uses peephole connections.
         When False, W_cell_to_ingate, W_cell_to_forgetgate and
@@ -410,7 +432,8 @@ class LSTMLayer(Layer):
         self.gradient_steps = gradient_steps
         self.grad_clipping = grad_clipping
 
-        (self.num_batch, _, num_inputs) = self.input_shape
+        self.num_batch = self.input_shape[0]
+        num_inputs = np.prod(self.input_shape[2:])
 
         # Initialize parameters using the supplied args
         self.W_in_to_ingate = self.add_param(
@@ -483,12 +506,23 @@ class LSTMLayer(Layer):
                 W_cell_to_outgate, (num_units, ), name="W_cell_to_outgate")
 
         # Setup initial values for the cell and the hidden units
-        self.cell_init = self.add_param(
-            cell_init, (1, num_units), name="cell_init",
-            trainable=learn_init, regularizable=False)
-        self.hid_init = self.add_param(
-            hid_init, (1, num_units), name="hid_init",
-            trainable=learn_init, regularizable=False)
+        if isinstance(cell_init, T.TensorVariable):
+            if cell_init.ndim != 2:
+                raise ValueError("When a tensor cell_init should be a matrix")
+            self.cell_init = cell_init
+        else:
+            self.cell_init = self.add_param(
+                cell_init, (1, num_units), name="cell_init",
+                trainable=learn_init, regularizable=False)
+
+        if isinstance(hid_init, T.TensorVariable):
+            if hid_init.ndim != 2:
+                raise ValueError("When a tensor hid_init should be a matrix")
+            self.hid_init = hid_init
+        else:
+            self.hid_init = self.add_param(
+                hid_init, (1, self.num_units), name="hid_init",
+                trainable=learn_init, regularizable=False)
 
     def get_output_shape_for(self, input_shape):
         return input_shape[0], input_shape[1], self.num_units
@@ -598,10 +632,16 @@ class LSTMLayer(Layer):
             sequences = input_dot_w
             step_fun = step
 
-        # repeat cell and hid init to batch size
         ones = T.ones((self.num_batch, 1))
-        hid_init = T.dot(ones, self.hid_init)
-        cell_init = T.dot(ones, self.cell_init)
+        if isinstance(self.cell_init, T.TensorVariable):
+            cell_init = self.cell_init
+        else:
+            cell_init = T.dot(ones, self.cell_init)  # repeat num_batch times
+
+        if isinstance(self.hid_init, T.TensorVariable):
+            hid_init = self.hid_init
+        else:
+            hid_init = T.dot(ones, self.hid_init)  # repeat num_batch times
 
         # Scan op iterates over first dimension of input and repeatedly
         # applies the step function
@@ -611,6 +651,9 @@ class LSTMLayer(Layer):
             outputs_info=[cell_init, hid_init],
             go_backwards=self.backwards,
             truncate_gradient=self.gradient_steps)[0]
+
+        self.hid_out = hid_out
+        self.cell_out = cell_out
 
         # dimshuffle back to (n_batch, n_time_steps, n_features))
         hid_out = hid_out.dimshuffle(1, 0, 2)
