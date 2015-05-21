@@ -1,6 +1,6 @@
 import pytest
 from lasagne.layers import RecurrentLayer, LSTMLayer, CustomRecurrentLayer
-from lasagne.layers import InputLayer, DenseLayer
+from lasagne.layers import InputLayer, DenseLayer, GRULayer
 from lasagne.layers import helper
 import theano
 import theano.tensor as T
@@ -290,6 +290,136 @@ def test_lstm_bck():
     f_out_fwd, f_out_bck, f_hid_out_fwd, f_hid_out_bck = f_lstm(x_in)
 
     # lstm_fwd and lstm_bck have the same weights.
+    # Because the input is symmetric the output from scan should be equal.
+    np.testing.assert_almost_equal(f_hid_out_fwd, f_hid_out_bck)
+
+    # test that the backwards model reverses its final input
+    np.testing.assert_almost_equal(f_out_fwd, f_out_bck[:, ::-1])
+
+#  GRU TESTS
+
+
+def test_gru_return_shape():
+    num_batch, seq_len, n_features1, n_features2 = 5, 3, 10, 11
+    num_units = 6
+    x = T.tensor4()
+    in_shp = (num_batch, seq_len, n_features1, n_features2)
+    l_inp = InputLayer(in_shp)
+    l_rec = GRULayer(l_inp, num_units=num_units)
+
+    x_in = np.random.random(in_shp).astype('float32')
+    l_out = helper.get_output(l_rec, x)
+    f_rec = theano.function([x], l_out)
+    f_out = f_rec(x_in)
+
+    assert helper.get_output_shape(l_rec, x_in.shape) == f_out.shape
+    assert f_out.shape == (num_batch, seq_len, num_units)
+
+
+def test_gru_grad():
+    num_batch, seq_len, n_features = 5, 3, 10
+    num_units = 6
+    x = T.tensor3()
+    mask = T.matrix()
+    l_inp = InputLayer((num_batch, seq_len, n_features))
+    l_gru = GRULayer(l_inp,
+                     num_units=num_units)
+    l_out = helper.get_output(l_gru, x, mask=mask)
+    g = T.grad(T.mean(l_out), lasagne.layers.get_all_params(l_gru))
+    assert isinstance(g, (list, tuple))
+
+
+def test_gru_nparams_learn_init_false():
+    l_inp = InputLayer((2, 2, 3))
+    l_gru = GRULayer(l_inp, 5, learn_init=False)
+
+    # 3*n_gates
+    # the 3 is because we have  hid_to_gate, in_to_gate and bias for each gate
+    assert len(lasagne.layers.get_all_params(l_gru, trainable=True)) == 9
+
+    # bias params(3) + hid_init
+    assert len(lasagne.layers.get_all_params(l_gru, regularizable=False)) == 4
+
+
+def test_gru_nparams_learn_init_true():
+    l_inp = InputLayer((2, 2, 3))
+    l_gru = GRULayer(l_inp, 5, learn_init=True)
+
+    # 3*n_gates + hid_init
+    # the 3 is because we have  hid_to_gate, in_to_gate and bias for each gate
+    assert len(lasagne.layers.get_all_params(l_gru, trainable=True)) == 10
+
+    # bias params(3) + init params(1)
+    assert len(lasagne.layers.get_all_params(l_gru, regularizable=False)) == 4
+
+
+def test_gru_tensor_init():
+    # check if passing in TensorVariables to cell_init and hid_init works
+    num_units = 5
+    batch_size = 3
+    seq_len = 2
+    n_inputs = 4
+    in_shp = (batch_size, seq_len, n_inputs)
+    l_inp = InputLayer(in_shp)
+    hid_init = T.matrix()
+    x = T.tensor3()
+
+    l_lstm = GRULayer(l_inp, num_units, learn_init=True, hid_init=hid_init)
+
+    # check that the tensors are used and not overwritten
+    assert hid_init == l_lstm.hid_init
+
+    # 3*n_gates, should not return any inits
+    # the 3 is because we have  hid_to_gate, in_to_gate and bias for each gate
+    assert len(lasagne.layers.get_all_params(l_lstm, trainable=True)) == 9
+
+    # bias params(3), , should not return any inits
+    assert len(lasagne.layers.get_all_params(l_lstm, regularizable=False)) == 3
+
+    # check that it compiles and runs
+    output = lasagne.layers.get_output(l_lstm, x)
+    f = theano.function([x, hid_init], output)
+    x_test = np.ones(in_shp, dtype='float32')
+    hid_init = np.ones((batch_size, num_units), dtype='float32')
+    out = f(x_test, hid_init)
+    assert isinstance(out, np.ndarray)
+
+
+def test_gru_init_val_error():
+    # check if errors are raised when inits are non matrix tensor
+    vector = T.vector()
+    with pytest.raises(ValueError):
+        l_rec = GRULayer(InputLayer((2, 2, 3)), 5, hid_init=vector)
+
+
+def test_gru_grad_clipping():
+    # test that you can set grad_clip variable
+    x = T.tensor3()
+    l_rec = GRULayer(InputLayer((2, 2, 3)), 5, grad_clipping=1)
+    l_out = lasagne.layers.get_output(l_rec, x)
+
+
+def test_gru_bck():
+    num_batch, seq_len, n_features1 = 2, 3, 4
+    num_units = 2
+    x = T.tensor3()
+    in_shp = (num_batch, seq_len, n_features1)
+    l_inp = InputLayer(in_shp)
+
+    x_in = np.ones(in_shp).astype('float32')
+
+    # need to set random seed.
+    np.random.seed(1234)
+    l_gru_fwd = GRULayer(l_inp, num_units=num_units, backwards=False)
+    np.random.seed(1234)
+    l_gru_bck = GRULayer(l_inp, num_units=num_units, backwards=True)
+    l_out_fwd = helper.get_output(l_gru_fwd, x)
+    l_out_bck = helper.get_output(l_gru_bck, x)
+    f_lstm = theano.function([x], [l_out_fwd, l_out_bck,
+                                   l_gru_fwd.hid_out, l_gru_bck.hid_out])
+    f_out_fwd, f_out_bck, f_hid_out_fwd, f_hid_out_bck = f_lstm(x_in)
+
+    # lstm_fwd and gru_bck have the same weights.
     # Because the input is symmetric the output from scan should be equal.
     np.testing.assert_almost_equal(f_hid_out_fwd, f_hid_out_bck)
 
