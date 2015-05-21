@@ -277,11 +277,10 @@ def calc_cross_ent(net_output, targets):
 
 # note the use of deterministic keyword to disable dropout during eval
 train_out = lasagne.layers.get_output(l_out, sym_x, deterministic=False)
-hidden_states_train = l_rec1.get_hidden_values() + l_rec2.get_hidden_values()
-
+hidden_states_train = [l_rec1.cell, l_rec1.hid, l_rec2.cell, l_rec2.hid]
 
 eval_out = lasagne.layers.get_output(l_out, sym_x, deterministic=True)
-hidden_states_eval = l_rec1.get_hidden_values() + l_rec2.get_hidden_values()
+hidden_states_eval = [l_rec1.cell, l_rec1.hid, l_rec2.cell, l_rec2.hid]
 
 
 cost_train = T.mean(calc_cross_ent(train_out, sym_y))
@@ -378,7 +377,7 @@ for epoch in range(num_epochs):
 
     if epoch > (no_decay_epochs - 1):
         current_lr = sh_lr.get_value()
-        sh_lr.set_value(current_lr / float(decay))
+        sh_lr.set_value(T.cast(current_lr / float(decay), 'float32'))
 
     elapsed = time.time() - batch_time
     words_per_second = float(BATCH_SIZE*(MODEL_SEQ_LEN)*len(l_cost)) / elapsed
