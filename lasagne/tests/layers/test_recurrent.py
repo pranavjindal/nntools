@@ -425,3 +425,22 @@ def test_gru_bck():
 
     # test that the backwards model reverses its final input
     np.testing.assert_almost_equal(f_out_fwd, f_out_bck[:, ::-1])
+
+
+def test_lstm_self_outvars():
+    # check that outvars are correctly stored and returned
+    num_batch, seq_len, n_features1 = 2, 3, 4
+    num_units = 2
+    x = T.tensor3()
+    in_shp = (num_batch, seq_len, n_features1)
+    l_inp = InputLayer(in_shp)
+
+    x_in = np.ones(in_shp).astype('float32')
+
+    # need to set random seed.
+    l_gru = GRULayer(l_inp, num_units=num_units, backwards=True)
+    l_out = helper.get_output(l_gru, x)
+    f_gru = theano.function([x], [l_out, l_gru.hid_out])
+    f_out, f_out_self = f_gru(x_in)
+
+    np.testing.assert_almost_equal(f_out, f_out_self)
