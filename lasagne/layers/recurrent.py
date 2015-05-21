@@ -10,6 +10,7 @@ The following recurrent layers are implemented:
 * :func:`CustomRecurrentLayer()`
 * :func:`RecurrentLayer()`
 * :func:`LSTMLayer()`
+* :func:`GRULayer()`
 
 Recurrent layers and feed-forward layers can be combined in the same network
 by using a few reshape operations, please refer to the recurrent examples for
@@ -199,14 +200,14 @@ class CustomRecurrentLayer(Layer):
             outputs_info=[hid_init],
             truncate_gradient=self.gradient_steps)[0]
 
-        self.hid_out = hid_out
-
         # dimshuffle back to (n_batch, n_time_steps, n_features))
         hid_out = hid_out.dimshuffle(1, 0, 2)
 
         # if scan is backward reverse the output
         if self.backwards:
             hid_out = hid_out[:, ::-1, :]
+
+        self.hid_out = hid_out
 
         return hid_out
 
@@ -653,15 +654,17 @@ class LSTMLayer(Layer):
             go_backwards=self.backwards,
             truncate_gradient=self.gradient_steps)[0]
 
-        self.hid_out = hid_out
-        self.cell_out = cell_out
-
         # dimshuffle back to (n_batch, n_time_steps, n_features))
         hid_out = hid_out.dimshuffle(1, 0, 2)
+        cell_out = cell_out.dimshuffle(1, 0, 2)
 
         # if scan is backward reverse the output
         if self.backwards:
-            hid_out = hid_out[:, ::-1, :]
+            hid_out = hid_out[:, ::-1]
+            cell_out = cell_out[:, ::-1]
+
+        self.hid_out = hid_out
+        self.cell_out = cell_out
 
         return hid_out
 
