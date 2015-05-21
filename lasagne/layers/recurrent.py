@@ -933,7 +933,6 @@ class GRULayer(Layer):
             sequences=sequences,
             outputs_info=[hid_init],
             go_backwards=self.backwards)[0]
-        self.hid_out = hid_out
 
         # dimshuffle back to (n_batch, n_time_steps, n_features))
         hid_out = hid_out.dimshuffle(1, 0, 2)
@@ -941,5 +940,7 @@ class GRULayer(Layer):
         # if scan is backward reverse the output
         if self.backwards:
             hid_out = hid_out[:, ::-1, :]
+
+        self.hid_out = hid_out
 
         return hid_out
