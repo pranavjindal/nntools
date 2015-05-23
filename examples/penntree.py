@@ -1,55 +1,69 @@
+"""
+Examples that reproduce the the results of http://arxiv.org/abs/1409.2329
+We only reproduce the small LSTM language model on Penn Tree and only
+reproduce the validation score.
+
+The example demonstrates:
+
+    * How to setup LSTM in Lasagne to predict a target for every position in a
+      sequence.
+    * How to setup Lasagne for language modelling tasks.
+    * Fancy reordering of data to allow theano to process a large text
+      corpus.
+    * How to combine recurrent and feed-forward layers in the same Lasagne
+      model.
+"""
 from __future__ import print_function, division
 import numpy as np
 import theano
 import theano.tensor as T
 import os
 import time
-import sys
 import gzip
 import lasagne
 
-
 #  SETTINGS
-folder = 'penntree'
-BATCH_SIZE = 20         # batch size
-MODEL_SEQ_LEN = 20      # how many steps to unroll
-TOL = 1e-6              # numerial stability
-INI = lasagne.init.Uniform(0.1)
-REC_NUM_UNITS = 200
-embedding_size = REC_NUM_UNITS
-dropout_frac = 0
-lr = 1.0
-decay = 2.0
-max_grad_norm = 10
-num_epochs = 1000
-no_decay_epochs = 5
+folder = 'penntree'                 # subfolder with data
+BATCH_SIZE = 20                     # batch size
+MODEL_SEQ_LEN = 20                  # how many steps to unroll
+TOL = 1e-6                          # numerial stability
+INI = lasagne.init.Uniform(0.1)     # initial parameter values
+REC_NUM_UNITS = 200                 # number of LSTM units
+embedding_size = 200                # Embedding size
+dropout_frac = 0                    # optional recurrent dropout
+lr = 1.0                            # learning rate
+decay = 2.0                         # decay factor
+no_decay_epochs = 5                 # run this many epochs before first decay
+max_grad_norm = 10                  # scale steps if norm is above this value
+num_epochs = 15                     # Number of epochs to run
 
+
+# First we'll define a functions to load the Penn Tree data.
 
 def load_data(file_name, vocab_map, vocab_idx):
     """
-    Loads Penn Tree files from https://github.com/wojzaremba/lstm
+    Loads Penn Tree files downloaded from https://github.com/wojzaremba/lstm
 
     Parameters
     ----------
     file_name : str
-        Path to datafile
+        Path to Penn tree file.
     vocab_map : dictionary
         Dictionary mapping words to integers
     vocab_idx : one element list
-        Current vocabolary index
+        Current vocabulary index.
 
     Returns
     -------
-    Returns an array with the words specified in file_name encoded as integers.
-    Note that the function has the side effects that vocab_map and vocab_idx are
-    updated.
+    Returns an array with each words specified in file_name as integers.
+    Note that the function has the side effects that vocab_map and vocab_idx
+    are updated.
 
     Notes
     -----
     This is python port of the LUA function load_data in
     https://github.com/wojzaremba/lstm/blob/master/data.lua
     """
-
     def process_line(line):
         line = line.lstrip()
         line = line.replace('\n', '<eos>')
@@ -75,42 +89,54 @@ def load_data(file_name, vocab_map, vocab_idx):
     return x.astype('int32')
 
 
-def reorder(x, batch_size, model_seq_len):
+def reorder(x_in, batch_size, model_seq_len):
     """
-    Rearranges dataset so batehes process sequential data.
+    Rearranges data set so batches process sequential data.
+    If we have the dataset:
 
-    The data is reordered such that position n in each batch corresponds to a
-    sequence.
+    x_in = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
 
-    some_sequence = batch_1[n] + batch_1[n] ... batch_j[n]
+    and the batch size is 2 and the model_seq_len is 3. Then the dataset is
+    reordered such that:
+
+                   Batch 1    Batch 2
+                 ------------------------
+    batch pos 1  [1, 2, 3]   [4, 5, 6]
+    batch pos 2  [7, 8, 9]   [10, 11, 12]
+
+    This ensures that we use the last hidden state of batch 1 to initialize
+    batch 2.
+
+    Also creates targets. In language modelling the target is to predict the
+    next word in the sequence.
 
     Parameters
     ----------
-    x : 1D numpy.array
+    x_in : 1D numpy.array
     batch_size : int
     model_seq_len : int
         number of steps the model is unrolled
 
     Returns
     -------
-    Reoredered x and reoredered targets. Targets are shifted version of x
+    reordered x_in and reordered targets. Targets are shifted version of x_in.
 
     """
-    if x.ndim != 1:
-        raise ValueError("Data must be 1D, was", x.ndim)
+    if x_in.ndim != 1:
+        raise ValueError("Data must be 1D, was", x_in.ndim)
 
-    if x.shape[0] % (batch_size*model_seq_len) == 0:
-        print(" x.shape[0] % (batch_size*model_seq_len) == 0 -> x is "
-              "set to x = x[:-1]")
-        x = x[:-1]
+    if x_in.shape[0] % (batch_size*model_seq_len) == 0:
+        print(" x_in.shape[0] % (batch_size*model_seq_len) == 0 -> x_in is "
+              "set to x_in = x_in[:-1]")
+        x_in = x_in[:-1]
 
     x_resize =  \
-        (x.shape[0] // (batch_size*model_seq_len))*model_seq_len*batch_size
+        (x_in.shape[0] // (batch_size*model_seq_len))*model_seq_len*batch_size
     n_samples = x_resize // (model_seq_len)
     n_batches = n_samples // batch_size
 
-    targets = x[1:x_resize+1].reshape(n_samples, model_seq_len)
-    x_out = x[:x_resize].reshape(n_samples, model_seq_len)
+    targets = x_in[1:x_resize+1].reshape(n_samples, model_seq_len)
+    x_out = x_in[:x_resize].reshape(n_samples, model_seq_len)
 
     out = np.zeros(n_samples, dtype=int)
     for i in range(n_batches):
@@ -134,52 +160,26 @@ def validdata(model_seq_len, batch_size, vocab_map, vocab_idx):
                   vocab_map, vocab_idx)
     return reorder(x, batch_size, model_seq_len)
 
-
-def load_data_masked(model_seq_len, batch_size, vocab_map, vocab_idx, fn):
-    x = load_data(os.path.join(folder, fn),
-                  vocab_map, vocab_idx)
-
-    # we pad so x is i multiple of batch_size*model_seq_len.
-    # the +1 ensures that we can shift when we need to extract targets.
-    n_samples_out = np.ceil(x.shape[0] / float(model_seq_len * batch_size)) * \
-        model_seq_len * batch_size + 1
-
-    pad_len = n_samples_out - x.shape[0]
-    pad = np.zeros((pad_len), dtype=x.dtype)
-
-    mask = np.zeros(n_samples_out, dtype=np.bool)
-    mask[:x.shape[0]] = True
-    x = np.concatenate([x, pad])
-    return x, mask
-
-
-def testdata(model_seq_len, batch_size, vocab_map, vocab_idx):
-    return load_data_masked(
-        model_seq_len, batch_size, vocab_map, vocab_idx, "ptb.test.txt.gz")
-
-
 # vocab_map and vocab_idx are updated as side effects of load_data
 vocab_map = {}
 vocab_idx = [0]
 x_train, y_train = traindata(MODEL_SEQ_LEN, BATCH_SIZE, vocab_map, vocab_idx)
-x_test, mask_test = testdata(MODEL_SEQ_LEN, BATCH_SIZE, vocab_map, vocab_idx)
 x_valid, y_valid = validdata(MODEL_SEQ_LEN, BATCH_SIZE, vocab_map, vocab_idx)
 vocab_size = vocab_idx[0]
-eval_freq = 10000000   # number of batches between eval
 
 
 print("-" * 80)
 print("Vocab size:s", vocab_size)
 print("Data shapes")
 print("Train data:", x_train.shape)
-print("Test data :", x_test.shape)
 print("Valid data:", x_valid.shape)
 print("-" * 80)
 
-# Theno symbolic vars
+# Theano symbolic vars
 sym_x = T.imatrix()
 sym_y = T.imatrix()
 
+# symbolic vars for initial recurrent initial states
 cell1_init_sym = T.matrix()
 hid1_init_sym = T.matrix()
 cell2_init_sym = T.matrix()
@@ -187,25 +187,21 @@ hid2_init_sym = T.matrix()
 
 
 # BUILDING THE MODEL
-# ------------------
-# For a languge model we want to use the previous prediction as input in t+1.
-# In Lasagne you do that by giving an output network in the output_network arg.
-#
 # Model structure:
 #
-#    embedding -> LSTM1 --> LSTM2 --> output network------> predictions
+#    embedding --> LSTM1 --> LSTM2 --> output network --> predictions
 l_inp = lasagne.layers.InputLayer((BATCH_SIZE, MODEL_SEQ_LEN))
 
 l_emb = lasagne.layers.EmbeddingLayer(
     l_inp,
-    input_size=vocab_size,  # size of embedding = number of words
+    input_size=vocab_size,       # size of embedding = number of words
     output_size=embedding_size,  # vector size used to represent each word
     W=INI)
 
 if dropout_frac > 0:
     l_emb = lasagne.layers.DropoutLayer(l_emb, p=dropout_frac)
 
-# first layer
+# first LSTM layer
 l_rec1 = lasagne.layers.LSTMLayer(
     l_emb,
     num_units=REC_NUM_UNITS,
@@ -226,6 +222,7 @@ if dropout_frac > 0:
 else:
     l_drp1 = l_rec1
 
+# Second LSTM layer
 l_rec2 = lasagne.layers.LSTMLayer(
     l_rec1,
     num_units=REC_NUM_UNITS,
@@ -240,13 +237,14 @@ l_rec2 = lasagne.layers.LSTMLayer(
     W_in_to_outgate=INI,
     learn_init=False,
     hid_init_val=[cell2_init_sym, hid2_init_sym])
-# output_network=output_network)
 
 if dropout_frac > 0:
     l_drp2 = lasagne.layers.DropoutLayer(l_rec2, p=dropout_frac)
 else:
     l_drp2 = l_rec2
 
+# by reshaping we can combine feed-forward and recurrent layers in the
+# same Lasagne model.
 l_shp = lasagne.layers.ReshapeLayer(l_drp2,
                                     (BATCH_SIZE*MODEL_SEQ_LEN, REC_NUM_UNITS))
 l_out = lasagne.layers.DenseLayer(l_shp,
@@ -257,47 +255,50 @@ l_out = lasagne.layers.ReshapeLayer(l_out,
 
 
 def calc_cross_ent(net_output, targets):
+    # Helper function to calculate the cross entropy error
     preds = T.reshape(net_output, (BATCH_SIZE * MODEL_SEQ_LEN, vocab_size))
     preds += TOL  # add constant for numerical stability
     targets = T.flatten(targets)
     cost = T.nnet.categorical_crossentropy(preds, targets)
     return cost
 
-# note the use of deterministic keyword to disable dropout during eval
+# Note the use of deterministic keyword to disable dropout during evaluation.
 train_out = lasagne.layers.get_output(l_out, sym_x, deterministic=False)
+
+# after we have called get_ouput then the layers will have reference to
+# their output values. We need to keep track of the output values for both
+# training and evaluation and for each hidden layer because we want to
+# initialze each batch with the last hidden values from the previous batch.
 hidden_states_train = [l_rec1.cell, l_rec1.hid, l_rec2.cell, l_rec2.hid]
 
 eval_out = lasagne.layers.get_output(l_out, sym_x, deterministic=True)
 hidden_states_eval = [l_rec1.cell, l_rec1.hid, l_rec2.cell, l_rec2.hid]
 
-
 cost_train = T.mean(calc_cross_ent(train_out, sym_y))
 cost_eval = T.mean(calc_cross_ent(eval_out, sym_y))
 
-
+# Get list of all trainable parameters in the network.
 all_params = lasagne.layers.get_all_params(l_out, trainable=True)
 
 # Calculate gradients w.r.t cost function. Note that we scale the cost with
 # MODEL_SEQ_LEN. This is to be consistent with
 # https://github.com/wojzaremba/lstm . The scaling is due to difference
-# between torch and theano.
-# We could have also scaled the learning rate, and also rescaled the
-# norm constraint.
+# between torch and theano. We could have also scaled the learning rate, and
+# also rescaled the norm constraint.
 all_grads = T.grad(cost_train*MODEL_SEQ_LEN, all_params)
 
 # With the gradients for each parameter we can calculate update rules for each
 # parameter. Lasagne implements a number of update rules, here we'll use
-# sgd and step_scaling
-all_grads, norm, multiplier = lasagne.updates.total_norm_constraint(
-    all_grads, max_grad_norm)
+# sgd and a total_norm_constraint.
+all_grads, norm = lasagne.updates.total_norm_constraint(
+    all_grads, max_grad_norm, return_norm=True)
 
 # Use shared variable for learning rate. Allows us to change the learning rate
 # during training.
 sh_lr = theano.shared(lasagne.utils.floatX(lr))
 updates = lasagne.updates.sgd(all_grads, all_params, learning_rate=sh_lr)
 
-# define training function. The update arg specifies that the parameters
-# should be updated using the update rules.
+# Define evaluation function. This graph disables dropout.
 print("compiling f_eval...")
 fun_inp = [sym_x, sym_y,
            cell1_init_sym, hid1_init_sym, cell2_init_sym, hid2_init_sym]
@@ -308,6 +309,9 @@ f_eval = theano.function(fun_inp,
                           hidden_states_eval[2][:, -1],
                           hidden_states_eval[3][:, -1]])
 
+# define training function. This graph has dropout enabled.
+# The update arg specifies that the parameters should be updated using the
+# update rules.
 print("compiling f_train...")
 f_train = theano.function(fun_inp,
                           [cost_train,
@@ -321,14 +325,14 @@ f_train = theano.function(fun_inp,
 
 def calc_perplexity(x, y):
     """
-    TODO: Write expression for plexity, figure out why
-    perp_log_sum / n_samples is probably equal to the n_sample'th root
+    Helper function to evaluate perplexity.
 
+    Perplexity is the inverse probability of the test set, normalized by the
+    number of words.
+    See: https://web.stanford.edu/class/cs124/lec/languagemodeling.pdf
 
-    THIS CUTS OF A BATCH, DONT USE IT FOR FINAL PERFORMANCE!
-    :param x:
-    :param mask:
-    :return:
+    This function is largely based on the perplexity calcualtion from
+    https://github.com/wojzaremba/lstm/
     """
 
     n_batches = x.shape[0] // BATCH_SIZE
@@ -337,8 +341,8 @@ def calc_perplexity(x, y):
                                          dtype='float32') for _ in range(4)]
 
     for i in range(n_batches):
-        x_batch = x[i*BATCH_SIZE:(i+1)*BATCH_SIZE]   # single batch
-        y_batch = y[i*BATCH_SIZE:(i+1)*BATCH_SIZE]   # single batch
+        x_batch = x[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
+        y_batch = y[i*BATCH_SIZE:(i+1)*BATCH_SIZE]
         cost, cell1, hid1, cell2, hid2 = f_eval(
             x_batch, y_batch, cell1, hid1, cell2, hid2)
         l_cost.append(cost)
@@ -348,11 +352,11 @@ def calc_perplexity(x, y):
 
     return perplexity
 
-n_batches_train = x_train.shape[0] // BATCH_SIZE   # floor
+n_batches_train = x_train.shape[0] // BATCH_SIZE
 for epoch in range(num_epochs):
-    l_cost, l_norm = [], []
+    l_cost, l_norm, batch_time = [], [], time.time()
 
-    batch_time = time.time()
+    # use zero as initial state
     cell1, hid1, cell2, hid2 = [np.zeros((BATCH_SIZE, REC_NUM_UNITS),
                                          dtype='float32') for _ in range(4)]
     for i in range(n_batches_train):
