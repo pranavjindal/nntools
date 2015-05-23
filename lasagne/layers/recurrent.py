@@ -713,14 +713,14 @@ class LSTMLayer(Layer):
 class GRULayer(Layer):
     """Gated Recurrent Layer [1]_, [2]_
 
-    Layer with gated recurrent units (GRU) as described in [1]_, [2]_.
+    Layer with gated recurrent units (GRU) as described in [1]_ and [2]_.
 
     Parameters
     ----------
-    input_layer : layers.Layer
-        Input to this recurrent layer
+    incoming : a :class:`lasagne.layers.Layer` instance or a tuple
+        The layer feeding into this layer, or the expected input shape.
     num_units : int
-        Number of hidden units
+        Number of hidden units.
     W_in_to_resetgate : function or np.ndarray or theano.shared
     W_hid_to_resetgate : function or np.ndarray or theano.shared
     b_resetgate : function or np.ndarray or theano.shared
@@ -733,7 +733,6 @@ class GRULayer(Layer):
     nonlinearity_resetgate : function
     nonlinearity_updategate : function
     nonlinearity_cell : function
-    hid_init : function or np.ndarray or theano.shared
     hid_init : function, np.ndarray, theano.shared or TensorVariable
         :math:`h_0`. Passing in a TensorVariable allows the user to specify
         the value of hid_init. In this mode learn_init is ignored.
@@ -742,8 +741,8 @@ class GRULayer(Layer):
         output again such that the output from the layer is always
         from x_1 to x_n.
     learn_init : boolean
-        If True, initial hidden values are learned. If hid_init or cell_init
-        are TensorVariables learn_init is ignored.
+        If True, initial hidden values are learned. If hid_init
+        is a TensorVariable then learn_init is ignored.
     grad_clipping: False or float
         If float the gradient messages are clipped during the backward pass.
         See [3]_ (p. 6) for further explanation.
@@ -759,7 +758,7 @@ class GRULayer(Layer):
     .. [3] Alex Graves : Generating Sequences With Recurrent Neural
        Networks
     """
-    def __init__(self, input_layer, num_units,
+    def __init__(self, incoming, num_units,
                  W_in_to_resetgate=init.Normal(0.1),
                  W_hid_to_resetgate=init.Normal(0.1),
                  b_resetgate=init.Constant(0.),
@@ -778,7 +777,7 @@ class GRULayer(Layer):
                  grad_clipping=False):
 
         # Initialize parent layer
-        super(GRULayer, self).__init__(input_layer)
+        super(GRULayer, self).__init__(incoming)
         # For any of the nonlinearities, if None is supplied, use identity
         if nonlinearity_resetgate is None:
             self.nonlinearity_resetgate = nonlinearities.identity
