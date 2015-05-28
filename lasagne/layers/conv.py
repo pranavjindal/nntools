@@ -90,6 +90,11 @@ def conv_output_length(input_length, filter_size,
 
 class Conv1DLayer(Layer):
     """
+    lasagne.layers.Conv1DLayer(incoming, num_filters, filter_size, stride=1,
+    border_mode="valid", untie_biases=False, W=lasagne.init.GlorotUniform(),
+    b=lasagne.init.Constant(0.), nonlinearity=lasagne.nonlinearities.rectify,
+    convolution=lasagne.theano_extensions.conv.conv1d_mc0, **kwargs)
+
     1D convolutional layer
 
     Performs a 1D convolution on its input and optionally adds a bias and
@@ -105,10 +110,10 @@ class Conv1DLayer(Layer):
     num_filters : int
         The number of learnable convolutional filters this layer has.
 
-    filter_size : int or tuple of int
+    filter_size : int or iterable
         An integer or a 1-element tuple specifying the size of the filters.
 
-    stride : int or tuple of int
+    stride : int or iterable
         An integer or a 1-element tuple specifying the stride of the
         convolution operation.
 
@@ -266,6 +271,12 @@ class Conv1DLayer(Layer):
 
 class Conv2DLayer(Layer):
     """
+    lasagne.layers.Conv2DLayer(incoming, num_filters, filter_size,
+    stride=(1, 1), border_mode="valid", untie_biases=False,
+    W=lasagne.init.GlorotUniform(), b=lasagne.init.Constant(0.),
+    nonlinearity=lasagne.nonlinearities.rectify,
+    convolution=theano.tensor.nnet.conv2d, **kwargs)
+
     2D convolutional layer
 
     Performs a 2D convolution on its input and optionally adds a bias and
@@ -276,15 +287,15 @@ class Conv2DLayer(Layer):
     incoming : a :class:`Layer` instance or a tuple
         The layer feeding into this layer, or the expected input shape. The
         output of this layer should be a 4D tensor, with shape
-        ``(batch_size, num_input_channels, input_height, input_width)``.
+        ``(batch_size, num_input_channels, input_rows, input_columns)``.
 
     num_filters : int
         The number of learnable convolutional filters this layer has.
 
-    filter_size : int or tuple of int
+    filter_size : int or iterable
         An integer or a 2-element tuple specifying the size of the filters.
 
-    stride : int or tuple of int
+    stride : int or iterable
         An integer or a 2-element tuple specifying the stride of the
         convolution operation.
 
@@ -316,7 +327,7 @@ class Conv2DLayer(Layer):
     W : Theano shared variable, numpy array or callable
         An initializer for the weights of the layer. This should initialize the
         layer weights to a 4D array with shape
-        ``(num_filters, num_input_channels, filter_height, filter_width)``.
+        ``(num_filters, num_input_channels, filter_rows, filter_columns)``.
         See :func:`lasagne.utils.create_param` for more information.
 
     b : Theano shared variable, numpy array, callable or None
@@ -324,7 +335,7 @@ class Conv2DLayer(Layer):
         layer will have no biases. This should initialize the layer biases to
         a 1D array with shape ``(num_filters,)`` if `untied_biases` is set to
         ``False``. If it is set to ``True``, its shape should be
-        ``(num_filters, input_height, input_width)`` instead.
+        ``(num_filters, input_rows, input_columns)`` instead.
         See :func:`lasagne.utils.create_param` for more information.
 
     nonlinearity : callable or None
