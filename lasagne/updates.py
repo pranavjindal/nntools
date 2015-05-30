@@ -27,8 +27,8 @@ Finally, we provide two helper functions to constrain the norm of tensors:
 
 :func:`norm_constraint()` can be used to constrain the norm of parameters
 (as an alternative to weight decay), or for a form of gradient clipping.
-:func:`total_norm_constraint() constrain the total norm of a list of tensors.
-This is often used when training recurrent neural networks.`
+:func:`total_norm_constraint()` constrain the total norm of a list of tensors.
+This is often used when training recurrent neural networks.
 
 Examples
 --------
