@@ -802,9 +802,7 @@ class GRULayer(Layer):
         # Input dimensionality is the output dimensionality of the input layer
         num_batch = self.input_shape[0]
         num_inputs = np.prod(self.input_shape[2:])
-        self.num_batch = num_batch
         self.num_inputs = num_inputs
-        self.seq_len = self.input_shape[1]
 
         self.W_in_to_updategate = self.add_param(
             W_in_to_updategate, (num_inputs, num_units),
@@ -892,6 +890,7 @@ class GRULayer(Layer):
         # Because scan iterates over the first dimension we dimshuffle to
         # (n_time_steps, n_batch, n_features)
         input = input.dimshuffle(1, 0, 2)
+        seq_len, num_batch, _ = input.shape
 
         # precompute inputs*W and dimshuffle
         # Input is provided as (n_batch, n_time_steps, n_features)
@@ -967,7 +966,7 @@ class GRULayer(Layer):
             hid_init = self.hid_init
         else:
             # repeat num_batch times
-            hid_init = T.dot(T.ones((self.num_batch, 1)), self.hid_init)
+            hid_init = T.dot(T.ones((num_batch, 1)), self.hid_init)
 
         # Scan op iterates over first dimension of input and repeatedly
         # applied the step function

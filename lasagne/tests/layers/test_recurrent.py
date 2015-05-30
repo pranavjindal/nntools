@@ -500,3 +500,20 @@ def test_gru_self_outvars():
     f_out, f_out_self = f_gru(x_in)
 
     np.testing.assert_almost_equal(f_out, f_out_self)
+
+
+def test_gru_variable_input_size():
+    # that seqlen and batchsize none works
+    num_batch, n_features1 = 6, 5
+    num_units = 13
+    x = T.tensor3()
+
+    in_shp = (None, None, n_features1)
+    l_inp = InputLayer(in_shp)
+    x_in2 = np.ones((num_batch, 15, n_features1)).astype('float32')
+    x_in1 = np.ones((num_batch+1, 10, n_features1)).astype('float32')
+    l_rec = GRULayer(l_inp, num_units=num_units, backwards=False)
+    l_out = helper.get_output(l_rec, x)
+    f_rec = theano.function([x], l_out)
+    f_out1 = f_rec(x_in1)
+    f_out2 = f_rec(x_in2)
