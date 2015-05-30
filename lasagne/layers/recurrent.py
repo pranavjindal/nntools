@@ -713,7 +713,7 @@ class LSTMLayer(Layer):
 class GRULayer(Layer):
     """Gated Recurrent Layer [1]_, [2]_
 
-    Layer with gated recurrent units (GRU) as described in [1]_ and [2]_.
+    Layer with gated recurrent units (GRU).
 
     Parameters
     ----------
@@ -739,7 +739,7 @@ class GRULayer(Layer):
     backwards : boolean
         If True, process the sequence backwards and then reverse the
         output again such that the output from the layer is always
-        from x_1 to x_n.
+        from :math:`x_1` to :math:`x_n.
     learn_init : boolean
         If True, initial hidden values are learned. If hid_init
         is a TensorVariable then learn_init is ignored.
@@ -756,7 +756,7 @@ class GRULayer(Layer):
        Recurrent Neural Networks on Sequence Modeling."
        arXiv preprint arXiv:1412.3555 (2014).
     .. [3] Alex Graves : Generating Sequences With Recurrent Neural
-       Networks
+       Networks.
     """
     def __init__(self, incoming, num_units,
                  W_in_to_resetgate=init.Normal(0.1),
