@@ -115,6 +115,8 @@ Layer classes: merge layers
 Layer classes: recurrent layers
 -------------------------------
 
+.. automodule:: lasagne.layers.recurrent
+
 .. autoclass:: CustomRecurrentLayer
     :members:
 
