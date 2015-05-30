@@ -653,7 +653,7 @@ def norm_constraint(tensor_var, max_norm, norm_axes=None, epsilon=1e-7):
 
 def total_norm_constraint(tensor_var, max_norm, epsilon=1e-7,
                           return_norm=False):
-    """Rescales a list of tensors based on their combined norm
+    """Rescales a list of tensors based on their combined norm.
 
     If the combined norm of the input tensors exceeds the threshold then all
     tensors are rescaled such that the combined norm is equal to the threshold.
@@ -671,15 +671,15 @@ def total_norm_constraint(tensor_var, max_norm, epsilon=1e-7,
         Value used to prevent numerical instability when dividing by
         very small or zero norms.
     return_norm : bool
-        If true the total norm is also returned
+        If true the total norm is also returned.
 
     Returns
     -------
     tensor_vars : list of TensorVariables
-        The scaled tensor variables
+        The scaled tensor variables.
     norm : Theano scalar
         The combined norms of the input variables prior to rescaling,
-        only returned if ``return_norms=True``
+        only returned if ``return_norms=True``.
 
     Examples
     --------
