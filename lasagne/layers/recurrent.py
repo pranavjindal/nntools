@@ -101,8 +101,6 @@ class CustomRecurrentLayer(Layer):
 
         # Get the batch size and number of units based on the expected output
         # of the input-to-hidden layer
-        self.num_batch = self.input_shape[0]
-        self.seq_len = self.input_shape[1]
         self.num_inputs = np.prod(self.input_shape[2:])
         self.num_units = input_to_hidden.output_shape[-1]
 
@@ -155,19 +153,21 @@ class CustomRecurrentLayer(Layer):
         # but scan requires the iterable dimension to be first
         # So, we need to dimshuffle to (n_time_steps, n_batch, n_features)
         input = input.dimshuffle(1, 0, 2)
+        seq_len, num_batch, _ = input.shape
 
         # Because the input is given for all time steps, we can precompute
         # the inputs to hidden before scanning. First we need to reshape
         # from (seq_len, batch_size, num_inputs) to
         # (seq_len*batch_size, num_inputs)
         input = T.reshape(input,
-                          (self.seq_len*self.num_batch, -1))
+                          (seq_len*num_batch, -1))
         input_dot_W = helper.get_output(
             self.input_to_hidden, input, **kwargs)
 
         # reshape to original (seq_len, batch_size, num_units)
+
         input_dot_W = T.reshape(input_dot_W,
-                                (self.seq_len, self.num_batch, -1))
+                                (seq_len, num_batch, -1))
 
         # Create single recurrent computation step function
         def step(input_dot_W_n, hid_previous, *args):
@@ -213,7 +213,7 @@ class CustomRecurrentLayer(Layer):
             hid_init = self.hid_init
         else:
             # repeat num_batch times
-            hid_init = T.dot(T.ones((self.num_batch, 1)), self.hid_init)
+            hid_init = T.dot(T.ones((num_batch, 1)), self.hid_init)
 
         non_seqs = helper.get_all_params(self.hidden_to_hidden)
         hid_out = theano.scan(
@@ -288,15 +288,15 @@ class RecurrentLayer(CustomRecurrentLayer):
                  gradient_steps=-1,
                  grad_clipping=False):
         input_shape = helper.get_output_shape(incoming)
-        n_batch = input_shape[0]
+        num_batch = input_shape[0]
         # We will be passing the input at each time step to the dense layer,
         # so we need to remove the second dimension (the time dimension)
-        in_to_hid = DenseLayer(InputLayer((n_batch,) + input_shape[2:]),
+        in_to_hid = DenseLayer(InputLayer((num_batch,) + input_shape[2:]),
                                num_units, W=W_in_to_hid, b=b,
                                nonlinearity=None)
         # The hidden-to-hidden layer expects its inputs to have num_units
         # features because it recycles the previous hidden state
-        hid_to_hid = DenseLayer(InputLayer((n_batch, num_units)),
+        hid_to_hid = DenseLayer(InputLayer((num_batch, num_units)),
                                 num_units, W=W_hid_to_hid, b=None,
                                 nonlinearity=None)
 
@@ -453,7 +453,7 @@ class LSTMLayer(Layer):
         self.gradient_steps = gradient_steps
         self.grad_clipping = grad_clipping
 
-        self.num_batch = self.input_shape[0]
+        num_batch = self.input_shape[0]
         num_inputs = np.prod(self.input_shape[2:])
 
         # Initialize parameters using the supplied args
@@ -573,6 +573,7 @@ class LSTMLayer(Layer):
         # Because scan iterates over the first dimension we dimshuffle to
         # (n_time_steps, n_batch, n_features)
         input = input.dimshuffle(1, 0, 2)
+        seq_len, num_batch, _ = input.shape
 
         # Because the input is given for all time steps, we can precompute
         # the inputs to the gates before scanning.
@@ -663,7 +664,7 @@ class LSTMLayer(Layer):
             sequences = input_dot_W
             step_fun = step
 
-        ones = T.ones((self.num_batch, 1))
+        ones = T.ones((num_batch, 1))
         if isinstance(self.cell_init, T.TensorVariable):
             cell_init = self.cell_init
         else:
